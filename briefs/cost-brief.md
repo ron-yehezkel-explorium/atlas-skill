@@ -15,7 +15,7 @@ Read defaults from `README.md` unless user overrides.
 
 - Databricks warehouse ID: `2dfc33368ea84f86`
 - EC2 pricing reference: `reference/ec2-pricing.md`
-- Cost calculation reference: `workflows/workflow-cost.md` (for single-run deep dives)
+- Cost calculation reference: `actions/cost-calculator.md` (for single-run deep dives)
 - Roster emails: all `email` values from the roster table in `README.md`
 
 ## Step 0: Load Prerequisites
@@ -152,10 +152,10 @@ From the tables accessed and query previews, **synthesize a one-line summary** o
 
 ## Step 4: EC2 Cost Estimation (Jobs Only)
 
-For job compute workloads (SKU contains `JOBS`), estimate the EC2 cost as described in `workflows/workflow-cost.md`:
+For job compute workloads (SKU contains `JOBS`), estimate the EC2 cost as described in `actions/cost-calculator.md`:
 
 - Serverless jobs (`SERVERLESS` in SKU or `db.*` node types): EC2 is **bundled in DBU**. Add $0 for EC2.
-- Classic jobs: estimate EC2 ≈ DBU cost × 0.93 (based on observed ratios from workflow-cost.md analysis: $1.02 EC2 / $1.10 DBU ≈ 0.93x). This is a rough multiplier — flag as estimated.
+- Classic jobs: estimate EC2 ≈ DBU cost × 0.93 (based on observed ratios from cost-calculator.md analysis: $1.02 EC2 / $1.10 DBU ≈ 0.93x). This is a rough multiplier — flag as estimated.
 
 For interactive clusters (`ALL_PURPOSE`): EC2 is already significant but harder to attribute per-person on shared clusters. Use the same 0.93x ratio as a rough estimate.
 
@@ -317,12 +317,12 @@ If a workload matches multiple people (shared service), it is attributed to the 
 Want details on a specific workload? Reply with the number from the table:
 > "3" or "1, 5, 12"
 
-For job workloads, I'll run the full cost calculation from `workflows/workflow-cost.md` with exact EC2 breakdown per cluster. For interactive usage, I'll pull the full query history.
+For job workloads, I'll run the full cost calculation from `actions/cost-calculator.md` with exact EC2 breakdown per cluster. For interactive usage, I'll pull the full query history.
 ```
 
 #### Deep Dive Behavior (when user replies)
 
-1. **Job workload:** Execute `workflows/workflow-cost.md` for the specific `job_id` — find recent runs, pick the one in the time window, produce full cluster/DBU/EC2 breakdown.
+1. **Job workload:** Execute `actions/cost-calculator.md` for the specific `job_id` — find recent runs, pick the one in the time window, produce full cluster/DBU/EC2 breakdown.
 2. **Interactive cluster:** Pull full query history for that person in the time window — show all queries, durations, tables accessed.
 3. **SQL warehouse:** Pull query history filtered to that person, show top queries by duration.
 

@@ -11,12 +11,13 @@ Use markdown knowledge files bundled in this skill directory as the source of tr
 
 1. **Always read first:** `README.md` (roster + defaults). Abort if unreadable.
 2. **Workflow files** — identify intent, load exactly one:
-   - Daily brief: `workflows/daily-brief.md`
-   - On-call brief: `workflows/on-call-brief.md`
-   - Ticket creation: `workflows/tasks-creator.md` (mandatory for any create/open/write Jira request — load before drafting or running `acli jira workitem create`)
-   - Slack analysis: `workflows/slack-analyze.md` (when user pastes a Slack link or asks to analyze/respond to a Slack discussion)
-   - Workflow cost: `workflows/workflow-cost.md` (when user asks about Databricks workflow/job run cost, DBU usage, or compute cost calculation)
-   - Cost brief: `workflows/cost-brief.md` (when user asks for weekly/team Databricks cost report, cost brief, or team compute spending)
+   - Daily brief: `briefs/daily-brief.md`
+   - On-call brief: `briefs/on-call-brief.md`
+   - Ticket creation: `actions/tasks-creator.md` (mandatory for any create/open/write Jira request — load before drafting or running `acli jira workitem create`)
+   - Slack analysis: `actions/slack-analyze.md` (when user pastes a Slack link or asks to analyze/respond to a Slack discussion)
+   - Workflow cost: `actions/cost-calculator.md` (when user asks about Databricks workflow/job run cost, DBU usage, or compute cost calculation)
+   - Self-improver: `actions/self-improver.md` (when user says "self-improve", "learn from this", or gives meta-feedback about suboptimal agent behavior in the current session)
+   - Cost brief: `briefs/cost-brief.md` (when user asks for weekly/team Databricks cost report, cost brief, or team compute spending)
 3. No known workflow? Answer from README.md + tools only.
 4. User-requested format overrides take precedence.
 
@@ -49,3 +50,7 @@ MCP `-32601` on capability probes (`prompts/list`, etc.) is expected — note on
 - Skill directory files are canonical behavior and context.
 - Cite exact commands/tool calls used.
 - Logs: key counters (fetched, enriched, errors) and timings only.
+
+## Learned Rules
+
+<!-- Self-improver action appends generic behavioral rules here. Do not add use-case-specific content. -->
