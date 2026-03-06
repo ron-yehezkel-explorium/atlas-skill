@@ -14,12 +14,14 @@ Use markdown knowledge files bundled in this skill directory as the source of tr
    - Daily brief: `workflows/daily-brief.md`
    - On-call brief: `workflows/on-call-brief.md`
    - Ticket creation: `workflows/tasks-creator.md` (mandatory for any create/open/write Jira request — load before drafting or running `acli jira workitem create`)
+   - Slack analysis: `workflows/slack-analyze.md` (when user pastes a Slack link or asks to analyze/respond to a Slack discussion)
 3. No known workflow? Answer from README.md + tools only.
 4. User-requested format overrides take precedence.
 
 ## Tool Routing
 
-- Slack MCP tools (`slack_*`) for Slack data.
+- **Local repos first.** When a query mentions a project or repo name (e.g., "enrichments", "mulan", "gaudi"), resolve it against the local repos list in `README.md`. Check `git log` / `git diff` on the matching repo **before** searching Slack or Jira. This applies to questions like "any new X?", "what changed in X?", "updates on X repo?".
+- Slack MCP tools (`slack_*`) for Slack data — only after local repo and Jira signals are exhausted or when the question is explicitly about Slack conversations.
 - `acli` for Jira (prefer `--json`).
 - Local `git log` for repository signals.
 - Execute workflow steps directly — no helper scripts.
@@ -27,6 +29,7 @@ Use markdown knowledge files bundled in this skill directory as the source of tr
 ## Performance
 
 - **Jira first, Slack lazy.** Complete all Jira queries/enrichment before invoking Slack. Only touch Slack when the workflow explicitly requires it (e.g., deep dive).
+- **Local repos before Slack.** For project/code questions, check `git log --oneline --since="<window>" <repo_path>` first. Slack is a fallback, not the primary signal for code activity.
 - **Parallel enrichment is mandatory.** Batch all `view` calls together, then all `comment list` calls.
 
 ## Guards

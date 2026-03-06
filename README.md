@@ -38,3 +38,4 @@ Source of truth for person resolution.
 
 - `workflows/daily-brief.md`: team-wide daily brief playbook.
 - `workflows/on-call-brief.md`: on-call brief playbook (atlas-oncall channels, Jira, Databricks).
+- `workflows/slack-analyze.md`: Slack discussion analyzer — fetch a thread from a pasted link, digest it, then formulate replies, investigate, summarize, or extract action items.
