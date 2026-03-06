@@ -66,7 +66,18 @@ Acceptance Criteria
 
 `--parent` is the epic connection in this Jira setup.
 
+## Post-Creation: Slack Context Comment
+
+If the task originated from a Slack discussion (user provided a Slack link, or context was fetched from Slack), **always** add a comment with the Slack thread URL immediately after creating the task.
+
+```bash
+acli jira workitem comment create --key "ATB-XXXX" --body "Slack context: https://goldinai.slack.com/archives/CHANNEL/pTIMESTAMP"
+```
+
+- Extract the Slack link from the user's request or from the thread that was analyzed.
+- This step is mandatory whenever a Slack link is available — do not skip it.
+
 ## Verify Link + Content
 ```bash
-acli jira workitem view ATB-1234 --fields "summary,parent,description" --json
+acli jira workitem view ATB-1234 --fields "summary,parent,description,comment" --json
 ```

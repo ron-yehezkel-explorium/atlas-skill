@@ -39,3 +39,6 @@ Source of truth for person resolution.
 - `workflows/daily-brief.md`: team-wide daily brief playbook.
 - `workflows/on-call-brief.md`: on-call brief playbook (atlas-oncall channels, Jira, Databricks).
 - `workflows/slack-analyze.md`: Slack discussion analyzer — fetch a thread from a pasted link, digest it, then formulate replies, investigate, summarize, or extract action items.
+- `workflows/workflow-cost.md`: Databricks workflow cost calculator — compute exact DBU, EC2, and EBS costs for a given run ID.
+- `workflows/cost-brief.md`: Weekly team cost brief — all Atlas team Databricks processes, per-person breakdown, interactive usage summaries, full cost calculations.
+- `reference/ec2-pricing.md`: EC2 on-demand and spot pricing reference for common instance types.

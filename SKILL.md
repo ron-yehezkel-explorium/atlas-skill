@@ -15,6 +15,8 @@ Use markdown knowledge files bundled in this skill directory as the source of tr
    - On-call brief: `workflows/on-call-brief.md`
    - Ticket creation: `workflows/tasks-creator.md` (mandatory for any create/open/write Jira request — load before drafting or running `acli jira workitem create`)
    - Slack analysis: `workflows/slack-analyze.md` (when user pastes a Slack link or asks to analyze/respond to a Slack discussion)
+   - Workflow cost: `workflows/workflow-cost.md` (when user asks about Databricks workflow/job run cost, DBU usage, or compute cost calculation)
+   - Cost brief: `workflows/cost-brief.md` (when user asks for weekly/team Databricks cost report, cost brief, or team compute spending)
 3. No known workflow? Answer from README.md + tools only.
 4. User-requested format overrides take precedence.
 
