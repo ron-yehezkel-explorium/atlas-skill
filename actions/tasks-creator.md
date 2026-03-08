@@ -1,83 +1,93 @@
-# Tasks Creator: Jira Tasks (ATB)
+# Jira Issue Creator (ATB)
 
-Use this workflow when creating a new Jira task so ticket content is consistent, readable, and easy to edit in Jira UI.
+Use this workflow when creating a new Jira issue so ticket content is consistent, readable, and actionable.
 
 ## Trigger
-- Any request to create/open/write a new Jira ticket/task/issue.
+Any request to create/open/write a new Jira ticket/task/bug/issue.
+
+## Write Permission Guard
+- WRITE operations → **only** when user explicitly requests with words like "create", "open", "file", "add ticket"
+- "X is broken" → investigate only, do NOT create a ticket
+- When unclear → default to READ
+
+## Issue Type
+Infer from context:
+- **Bug** → error reports, broken behavior, regressions
+- **Task** → implementation work, improvements, automation
+
+Default: `Task`
+
+## Board
+Always `ATB`.
+
+## Priority
+Set only if explicitly mentioned or obviously urgent. Otherwise omit.
+
+## Ticket Linking
+Every ticket ID in output must be a clickable link: `[ATB-123](https://exploriumai.atlassian.net/browse/ATB-123)`  
+Never write bare IDs. Never use backticks around ticket IDs.
+
+---
 
 ## Content Format
-- Use plain text only in `--description`.
-- Do not send ADF JSON.
-- Use fixed sections in this exact order:
-  - `Problem Statement`
-  - `Goal`
-  - `Scope of Work`
-  - `Acceptance Criteria`
 
-Template:
+Plain text only in `--description`. No ADF JSON. Fixed sections in this order:
+
 ```text
-Problem Statement
+Context
 
-Currently, new technologies added to technographics_data are not immediately searchable. The autocomplete labels and indexes only refresh when the Business Catalog labels/index job runs. This creates a manual dependency, leading to stale autocomplete results and operational overhead.
+[Comprehensive background about systems, dependencies, requirements. Include technical details, architecture notes, or business context that helps understand why this work is needed.]
 
-Goal
+Motivation
 
-Automatically trigger the Business Catalog web-tech labels reindex immediately following every successful Technographics production update.
+[Business value, user impact, or technical debt being addressed. Connect to team goals or user pain points. Be specific about what problem this solves or what opportunity it creates.]
 
-Scope of Work
+DOD
 
-- Trigger Mechanism: Integrate a post-success hook in the Technographics production pipeline to initiate the labels indexing flow.
-- Target Indexes: Reindex the following specific components:
-  - bc_labels_web_tech_stack
-  - bc_labels_web_tech_categories
-- Observability: Implement failure visibility through automated alerts and structured logging.
+- Functional requirements
+- Testing requirements
+- Documentation needs
+- Deployment considerations
+- Success metrics (if applicable)
 
-Acceptance Criteria
-
-- Automation: Newly added technologies must appear in autocomplete without requiring manual job intervention.
-- Reliability: The Label Index job is successfully auto-triggered and completes its lifecycle.
-- Traceability: System failures must be visible in [Slack/PagerDuty/Monitoring Tool] with direct, traceable links to the specific run logs.
+Requested via Slack: <permalink>   ← include only when a Slack link is available
 ```
 
-## Create Task (with epic)
+---
+
+## Create Command
+
 ```bash
-acli jira workitem create   --project "ATB"   --type "Task"   --summary "Action-first short title"   --description "Problem Statement
+acli jira workitem create \
+  --project "ATB" \
+  --type "Task" \
+  --summary "Action-first short title" \
+  --description "Context
 
 ...
 
-Goal
+Motivation
 
 ...
 
-Scope of Work
+DOD
 
-- Trigger Mechanism: ...
-- Target Indexes: ...
-  - bc_labels_web_tech_stack
-  - bc_labels_web_tech_categories
-- Observability: ...
+- ...
+- ...
 
-Acceptance Criteria
-
-- Automation: ...
-- Reliability: ...
-- Traceability: ..."   --parent "ATB-1354"   --assignee "@me"   --json
+Requested via Slack: https://goldinai.slack.com/archives/CHANNEL/pTIMESTAMP" \
+  --parent "ATB-XXXX" \
+  --assignee "@me" \
+  --json
 ```
 
-`--parent` is the epic connection in this Jira setup.
+`--parent` is the epic connection. Omit if no epic applies.  
+For bugs use `--type "Bug"`.
 
-## Post-Creation: Slack Context Comment
+---
 
-If the task originated from a Slack discussion (user provided a Slack link, or context was fetched from Slack), **always** add a comment with the Slack thread URL immediately after creating the task.
+## Verify
 
 ```bash
-acli jira workitem comment create --key "ATB-XXXX" --body "Slack context: https://goldinai.slack.com/archives/CHANNEL/pTIMESTAMP"
-```
-
-- Extract the Slack link from the user's request or from the thread that was analyzed.
-- This step is mandatory whenever a Slack link is available — do not skip it.
-
-## Verify Link + Content
-```bash
-acli jira workitem view ATB-1234 --fields "summary,parent,description,comment" --json
+acli jira workitem view ATB-XXXX --fields "summary,parent,description" --json
 ```
