@@ -34,6 +34,12 @@ Source of truth for person resolution.
   - `/Users/ron.yehezkel/CursorProjects/gaudi`
   - `/Users/ron.yehezkel/CursorProjects/emlite`
 
+## GitHub
+
+- CLI auth: `ron-yehezkel-explorium` via macOS keyring (no `GITHUB_TOKEN` env var)
+- Org: `explorium-ai` (not `explorium`)
+- Protocol: HTTPS
+
 ## Workflows
 
 - `briefs/daily-brief.md`: team-wide daily brief playbook.
