@@ -11,7 +11,7 @@ Goal: calculate the precise total cost of a Databricks workflow run, broken down
 
 ## Defaults
 
-Read defaults from `README.md` unless user overrides.
+Use defaults from your system prompt unless user overrides.
 
 - Databricks warehouse ID: `2dfc33368ea84f86`
 - EC2 pricing reference: `reference/ec2-pricing.md`

@@ -14,7 +14,7 @@ Goal: analyze the current session for suboptimal agent behavior patterns, extrac
 - `actions/*.md` — action workflow files
 - `briefs/*.md` — brief workflow files
 - `reference/*.md` — reference data files
-- `README.md` — roster and defaults
+- `PROMPT.md` — canonical roster, defaults, and routing (loaded into agent system prompt)
 
 **Everything outside the atlas-skill directory is off-limits.** Never modify `AGENTS.md`, other skill folders, or any file outside `~/.config/opencode/skill/atlas-skill/`.
 

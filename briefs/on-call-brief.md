@@ -4,7 +4,7 @@ Goal: scan channels where @atlas-oncall is active, analyze issues in the request
 
 ## Defaults
 
-Read defaults from `README.md` unless user overrides.
+Use defaults from your system prompt unless user overrides.
 
 - On-call usergroup ID: `S0227A6C3BQ` (`@atlas-oncall`)
 - On-call rotation channel: `C04DKFGBQNR` (`#atlas-internal`)
@@ -30,6 +30,7 @@ Run in parallel:
 | #data-incidents | resolve at runtime |
 | #get-support | C0268LQHAJ0 |
 | #alerts-events-generation | resolve at runtime |
+| #alerts-tube | C04EP149U73 |
 | #atlas-dpd-public | resolve at runtime |
 
 **Dynamic discovery:** Search Slack for messages mentioning `S0227A6C3BQ` in the time window. Merge with seed list and deduplicate.

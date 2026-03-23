@@ -32,7 +32,7 @@ Messages may include file attachments (indicated by `FileCount > 0` in the CSV).
 
 ## Step 2: Resolve Participants
 
-Cross-reference Slack user IDs from the messages against the team roster in the atlas-skill `README.md` (`skill/atlas-skill/README.md`). For known team members, use their name and role.
+Cross-reference Slack user IDs from the messages against the team roster in your system prompt. For known team members, use their name and role.
 
 For unknown users who appear as **message authors** in the thread CSV, resolve via `slack_users_search` using the display name or username from the CSV. Batch all unknown user lookups in parallel.
 
@@ -81,6 +81,54 @@ The user will specify what they need. Match intent and execute:
 | **Identify action items** | Extract all explicit and implicit action items, assign owners where clear, flag unowned items. |
 
 If the intent is unclear, present the digest (Step 3) and ask: `"What would you like me to do with this discussion?"` with the options above.
+
+## Step 4b: Bare Link — Deep Investigation
+
+When the user pastes **only a Slack link with no additional text**, treat it as: "deeply investigate the issue described in this thread."
+
+After building the digest (Step 3), proceed automatically:
+
+1. **Extract signals** — pull every technical clue from the thread: error messages, timestamps, service/repo names, job IDs, ticket refs, customer names, stack traces.
+2. **Investigate in parallel** — use all relevant tools:
+
+| Tool | When |
+|---|---|
+| **Local repos** (`git log`, code search) | Thread mentions a service, repo, or recent deploy |
+| **Databricks CLI** | Data pipeline issues, job failures, query errors |
+| **Datadog** (if available) | Logs, metrics, error spikes around the reported timestamps |
+| **Jira** (`acli`) | Related tickets, recent changes, known issues |
+| **GitHub** (`gh`) | Recent PRs, deploys, config changes |
+
+3. **Follow the chain** — if one tool's output points somewhere else (e.g., a log references a commit, a job failure references a table), follow it.
+4. **Stop** when the picture is clear or signals are exhausted.
+
+### Output format for bare-link investigation
+
+```
+## Issue Summary
+
+### What's happening
+<2-4 sentence plain-English description>
+
+### Key signals
+- <bullet list: errors, symptoms, affected systems, timestamps>
+
+## Investigation
+
+<Keep it readable and display using tables if is the case>
+
+### Analysis
+<Connect the dots — root cause, timeline, blast radius>
+
+### Recommended Next Steps
+1. <actionable step>
+2. ...
+
+**Sources:** <all tools/data used>
+```
+
+Separate confirmed evidence from hypotheses. Use tables for structured data.
+When a specific data table is involved, always show a sample (`SELECT * ... LIMIT 5`) so the table structure is visible.
 
 ## Step 5: Output
 

@@ -7,22 +7,22 @@ Goal: produce a weekly Databricks cost report for the Atlas team — every proce
 ## Inputs
 
 - **Optional:** Time window override. Default: current ISO week (Monday 00:00 UTC → now).
-- **Optional:** Team filter override. Default: Atlas roster from `README.md`.
+- **Optional:** Team filter override. Default: Atlas roster from your system prompt.
 
 ## Defaults
 
-Read defaults from `README.md` unless user overrides.
+Use defaults from your system prompt unless user overrides.
 
 - Databricks warehouse ID: `2dfc33368ea84f86`
 - EC2 pricing reference: `reference/ec2-pricing.md`
 - Cost calculation reference: `actions/cost-calculator.md` (for single-run deep dives)
-- Roster emails: all `email` values from the roster table in `README.md`
+- Roster emails: all `email` values from the roster table in your system prompt
 
 ## Step 0: Load Prerequisites
 
 1. Load `databricks-sql` skill for SQL warehouse access.
 2. Read `reference/ec2-pricing.md` for EC2 price lookups.
-3. Read roster from `README.md` — extract all team emails into `<roster_emails>`.
+3. Extract all team emails from the roster in your system prompt into `<roster_emails>`.
 4. Ensure SQL warehouse is running. Start if stopped.
 
 ## Step 1: Collect All Team Usage (Single Query)
@@ -330,7 +330,7 @@ For job workloads, I'll run the full cost calculation from `actions/cost-calcula
 
 ```
 ---
-**Run metadata:** generated_at=<ISO8601>, window=<start> → <end>, roster_source=README.md, workloads_found=<N>, people=<N>, total_dbu=<N>, total_dbu_cost=$<N>, billing_tables=system.billing.usage+list_prices, query_history=system.query.history
+**Run metadata:** generated_at=<ISO8601>, window=<start> → <end>, roster_source=system_prompt, workloads_found=<N>, people=<N>, total_dbu=<N>, total_dbu_cost=$<N>, billing_tables=system.billing.usage+list_prices, query_history=system.query.history
 ```
 
 ## Edge Cases

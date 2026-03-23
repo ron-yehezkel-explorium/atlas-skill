@@ -6,7 +6,7 @@ Goal: produce a compact, scannable daily document with per-person focus using Ji
 
 ## Defaults
 
-Read defaults from `README.md` unless user overrides.
+Use defaults from your system prompt unless user overrides.
 
 ## Step 0: Time Window
 
@@ -160,7 +160,7 @@ Mandatory block at the end:
 
 ```
 ---
-**Run metadata:** generated_at=<ISO8601>, window=<start> → <end>, roster_source=atlas/README.md, in_progress_count=<N>, unassigned_count=<N>, enriched_count=<N>
+**Run metadata:** generated_at=<ISO8601>, window=<start> → <end>, roster_source=system_prompt, in_progress_count=<N>, unassigned_count=<N>, enriched_count=<N>
 ```
 
 Stale artifact detected (mtime or `generated_at` != today) → regenerate and warn: `"⚠️ Stale artifact detected — regenerated fresh."`
