@@ -26,6 +26,7 @@ Source of truth for person resolution.
 
 ### Runtime Defaults
 
+- Timezone: `Asia/Jerusalem` (Israel Time). All times displayed to the user must be in this timezone. Convert UTC timestamps from APIs/databases before rendering.
 - Jira project: `ATB`
 - Jira board id: `154`
 - Databricks warehouse id: `2dfc33368ea84f86`
@@ -66,7 +67,7 @@ User-requested format overrides take precedence.
 
 - **Local repos first.** When a query mentions a project or repo name (e.g., "enrichments", "mulan", "gaudi"), resolve it against the local repos list above. Inspect the local repo and project files first; use GitHub CLI only if the answer is not available locally. Check `git log` / `git diff` on the matching repo **before** searching Slack or Jira.
 - Slack MCP tools (`slack_*`) for Slack data — only after local repo and Jira signals are exhausted or when the question is explicitly about Slack conversations.
-- `acli` for Jira (prefer `--json`).
+- Atlassian MCP tools (`atlassian_jira_*`) for Jira.
 - Local `git log` for repository signals.
 - Execute workflow steps directly — no helper scripts.
 
@@ -89,5 +90,6 @@ MCP `-32601` on capability probes (`prompts/list`, etc.) is expected — note on
 
 ## Output
 
+- **Short names only.** Never include full file paths, full Databricks notebook/job paths, or full catalog paths in responses. Use only the file name, notebook name, or job name. Provide the full path only when the user explicitly asks for it.
 - Cite exact commands/tool calls used.
 - Logs: key counters (fetched, enriched, errors) and timings only.

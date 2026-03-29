@@ -14,24 +14,30 @@ Default: local start-of-day to now. Allow explicit `<start>` / `<end>` override.
 
 ## Step 1: Jira Data Collection
 
-Load `acli` skill. Use `--json`. **Run ALL queries in parallel.**
+Use Atlassian MCP Jira tools (`atlassian_jira_*`). **Run ALL queries in parallel.**
 
 ### Query 1: In Progress per person
 
-```bash
-acli jira workitem search --jql 'project = ATB AND assignee in (<team_emails>) AND status = "In Progress" AND issuetype in (Task, Bug) ORDER BY assignee ASC, priority DESC, updated DESC' --fields "key,summary,status,assignee,issuetype,priority" --paginate --json
+JQL:
+
+```text
+project = ATB AND assignee in (<team_emails>) AND status = "In Progress" AND issuetype in (Task, Bug) ORDER BY assignee ASC, priority DESC, updated DESC
 ```
 
 ### Query 2: Recently updated in window
 
-```bash
-acli jira workitem search --jql 'project = ATB AND updated >= "<start>" AND updated <= "<end>" AND status = "In Progress" AND issuetype in (Task, Bug) ORDER BY updated DESC' --fields "key,summary,status,assignee,reporter,issuetype,priority" --paginate --json
+JQL:
+
+```text
+project = ATB AND updated >= "<start>" AND updated <= "<end>" AND status = "In Progress" AND issuetype in (Task, Bug) ORDER BY updated DESC
 ```
 
 ### Query 3: Unassigned count only
 
-```bash
-acli jira workitem search --jql 'project = ATB AND assignee is EMPTY AND statusCategory != Done AND issuetype in (Task, Bug) ORDER BY updated DESC' --fields "key" --paginate --json
+JQL:
+
+```text
+project = ATB AND assignee is EMPTY AND statusCategory != Done AND issuetype in (Task, Bug) ORDER BY updated DESC
 ```
 
 Count results only — do NOT enrich. Queries for Done transitions or Top To Do run only when explicitly requested.
@@ -40,10 +46,7 @@ Count results only — do NOT enrich. Queries for Done transitions or Top To Do 
 
 **Only enrich In Progress tickets** from Query 1. Run all enrichment calls in parallel batches.
 
-```bash
-acli jira workitem view <KEY> --json
-acli jira workitem comment list <KEY> --json
-```
+For each ticket, fetch the issue details and comments via Atlassian MCP in parallel.
 
 If a person has >10 in-progress tickets, enrich all but flag: `"⚠️ <Name> has <N> in-progress tickets — needs triage."`
 

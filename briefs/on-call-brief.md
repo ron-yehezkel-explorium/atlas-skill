@@ -87,12 +87,7 @@ Status rules:
 
 Scan messages for Jira ticket patterns (`ATB-\d+`, `ES-\d+`, `ST-\d+`, `[A-Z]{2,}-\d+`) or `atlassian.net/browse/<KEY>` URLs.
 
-Load `acli` skill. For each ticket:
-
-```bash
-acli jira workitem view <KEY> --json
-acli jira workitem comment list <KEY> --json
-```
+Use Atlassian MCP Jira tools (`atlassian_jira_*`). For each ticket, fetch the issue details and comments in parallel.
 
 Jira `Done`/`Resolved` → issue status `resolved`. Jira `In Progress` → issue status `investigating`. Always keep Jira key in output.
 
@@ -150,8 +145,8 @@ Sorted: open/investigating/known first (🔴/🟡), then resolved (✅). Most re
 
 ❌ **BAD — DO NOT DO THIS:**
 ```
-- 1) Emlite DPD failures (match_prospect) — 🔴 Open (#issues-data, Mar 3 19:22 UTC)
-- 2) Daily Enrichments tests failing — 🟡 Investigating (#issues-data, Mar 3 08:21 UTC)
+- 1) Emlite DPD failures (match_prospect) — 🔴 Open (#issues-data, Mar 3 09:22 PM)
+- 2) Daily Enrichments tests failing — 🟡 Investigating (#issues-data, Mar 3 10:21 AM)
 ```
 
 ✅ **GOOD — THIS IS THE REQUIRED FORMAT:**

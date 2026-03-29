@@ -42,27 +42,49 @@ Display format: `**Name** (role if known)` for team members, `**Display Name**` 
 
 ## Step 3: Build Discussion Digest
 
-Produce a structured digest before executing the user's action:
+Produce a structured digest before executing the user's action. Lead with the **issue**, not the metadata.
 
 ```
 ## Discussion Digest
 
-**Channel:** #<channel_name> (or channel ID if name unavailable)
-**Started:** <date, time> by **<author>**
-**Participants:** <list>
-**Thread length:** <N> messages
-**Attachments:** <total file count across all messages, or "None">
-**Link:** <original permalink>
+### What's Going On
+
+<2-4 sentence plain-English explanation of the issue/topic. No jargon unless unavoidable.
+Answer: What broke / what's being discussed? Who triggered it? Who's the customer (if any)?>
+
+| Field | Detail |
+|---|---|
+| **Channel** | #<channel_name> |
+| **Reported by** | **<author>** — <date, time> |
+| **Customer** | <customer name if mentioned, otherwise "Internal" or "N/A"> |
+| **Participants** | <list> |
+| **Thread length** | <N> messages |
+| **Attachments** | <total file count, or "None"> |
+| **Link** | <original permalink> |
+
+### Key Examples
+
+Show concrete evidence from the thread — error messages, affected records, screenshots described, etc. Use a table when there are multiple data points:
+
+| Example | Detail |
+|---|---|
+| Error message | `<exact error text>` |
+| Affected entity | <customer / table / job / endpoint> |
+| Symptom | <what the user observed> |
+| Frequency / scope | <how often, how many affected> |
+
+If there's a single clear example, a fenced code block or quote is fine instead of a table.
 
 ---
 
-### Timeline
+### Deep Dive — Thread Timeline
 
 1. **<author>** (<relative time>): <message summary> [N files attached]
 2. ...
 ```
 
 Rules:
+- **Lead with the issue, not the timeline.** The reader should understand the problem within 10 seconds.
 - Preserve code blocks, links, and file references from messages.
 - Summarize long messages (>5 lines) but keep technical details intact.
 - Note file attachments inline with `[N files attached]` when present.
@@ -76,7 +98,7 @@ The user will specify what they need. Match intent and execute:
 |---|---|
 | **Formulate a response / reply** | Draft a reply matching Ron's tone (direct, technical, concise). Provide 1-2 variants if the situation is nuanced. Include relevant context from Jira/git if the discussion references tickets or code. |
 | **Understand / summarize** | Provide a structured summary: what's being discussed, key positions, unresolved points, and any decisions made. |
-| **Investigate / solve** | Identify the technical problem from the thread. Search local repos (`git log`, code), Jira (`acli`), and Databricks if relevant. Propose a solution with evidence. |
+| **Investigate / solve** | Identify the technical problem from the thread. Search local repos (`git log`, code), Jira (Atlassian MCP), and Databricks if relevant. Propose a solution with evidence. |
 | **Draft an update** | Compose a status update or follow-up message based on the thread context and any new information from Jira/git. |
 | **Identify action items** | Extract all explicit and implicit action items, assign owners where clear, flag unowned items. |
 
@@ -96,7 +118,7 @@ After building the digest (Step 3), proceed automatically:
 | **Local repos** (`git log`, code search) | Thread mentions a service, repo, or recent deploy |
 | **Databricks CLI** | Data pipeline issues, job failures, query errors |
 | **Datadog** (if available) | Logs, metrics, error spikes around the reported timestamps |
-| **Jira** (`acli`) | Related tickets, recent changes, known issues |
+| **Jira** (Atlassian MCP) | Related tickets, recent changes, known issues |
 | **GitHub** (`gh`) | Recent PRs, deploys, config changes |
 
 3. **Follow the chain** — if one tool's output points somewhere else (e.g., a log references a commit, a job failure references a table), follow it.
@@ -152,18 +174,21 @@ Structure the final output as:
 
 ### Reply Drafts
 
-When drafting replies, format them in a quoted block so the user can copy-paste directly:
+When drafting replies, wrap the text inside a fenced code block (triple backticks) so the user can copy-paste directly without formatting artifacts. Do NOT use `>` blockquote syntax — it pollutes the clipboard.
 
-```
+````
 ### Draft Reply
 
-> <the reply text, ready to paste into Slack>
 ```
+<the reply text, ready to paste into Slack>
+```
+````
 
 If the reply references Jira tickets or PRs, include links inline.
 
 ## Guards
 
+- **Ignore GMinion.** Strip all messages authored by the GMinion bot before any processing. Do not include them in the timeline, participant list, message count, or any analysis. Treat them as if they don't exist.
 - **Read-only.** Never post to Slack, modify Jira, or push code. Analysis and drafting only.
 - **Privacy.** Don't expose messages from DMs or private channels the user hasn't explicitly shared.
 - **Stale thread.** If the last message is >7 days old, note: `"This thread has been inactive for <N> days — context may be stale."`

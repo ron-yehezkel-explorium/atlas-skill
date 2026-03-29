@@ -6,7 +6,7 @@ Goal: produce a weekly Databricks cost report for the Atlas team — every proce
 
 ## Inputs
 
-- **Optional:** Time window override. Default: current ISO week (Monday 00:00 UTC → now).
+- **Optional:** Time window override. Default: current ISO week (Monday 00:00 Israel Time → now).
 - **Optional:** Team filter override. Default: Atlas roster from your system prompt.
 
 ## Defaults

@@ -55,14 +55,15 @@ Requested via Slack: <permalink>   ← include only when a Slack link is availab
 
 ---
 
-## Create Command
+## Create Request
 
-```bash
-acli jira workitem create \
-  --project "ATB" \
-  --type "Task" \
-  --summary "Action-first short title" \
-  --description "Context
+Use Atlassian MCP Jira create tools (`atlassian_jira_*`) with these fields:
+
+```text
+project: ATB
+type: Task
+summary: Action-first short title
+description: Context
 
 ...
 
@@ -75,19 +76,16 @@ DOD
 - ...
 - ...
 
-Requested via Slack: https://goldinai.slack.com/archives/CHANNEL/pTIMESTAMP" \
-  --parent "ATB-XXXX" \
-  --assignee "@me" \
-  --json
+Requested via Slack: https://goldinai.slack.com/archives/CHANNEL/pTIMESTAMP
+parent: ATB-XXXX
+assignee: @me
 ```
 
-`--parent` is the epic connection. Omit if no epic applies.  
-For bugs use `--type "Bug"`.
+`parent` is the epic connection. Omit if no epic applies.
+For bugs use `type: Bug`.
 
 ---
 
 ## Verify
 
-```bash
-acli jira workitem view ATB-XXXX --fields "summary,parent,description" --json
-```
+Use Atlassian MCP Jira view tools to verify `summary`, `parent`, and `description` on the created issue.
