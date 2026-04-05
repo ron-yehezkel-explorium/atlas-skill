@@ -84,8 +84,12 @@ assignee: @me
 `parent` is the epic connection. Omit if no epic applies.
 For bugs use `type: Bug`.
 
+## Default Status
+
+New tasks land in **Review** by default (board column configuration). Do NOT manually transition after creation — the board handles it.
+
 ---
 
 ## Verify
 
-Use Atlassian MCP Jira view tools to verify `summary`, `parent`, and `description` on the created issue.
+Use Atlassian MCP Jira view tools to verify `summary`, `parent`, `status` (should be `Review`), and `description` on the created issue.

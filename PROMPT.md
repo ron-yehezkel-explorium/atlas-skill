@@ -53,6 +53,7 @@ Identify intent from the user's message, then load **exactly one** workflow file
 |---|---|
 | Daily brief | `/Users/ron.yehezkel/.config/opencode/skill/atlas-skill/briefs/daily-brief.md` |
 | On-call brief | `/Users/ron.yehezkel/.config/opencode/skill/atlas-skill/briefs/on-call-brief.md` |
+| Team timeline / gantt / capacity planning | `/Users/ron.yehezkel/.config/opencode/skill/atlas-skill/briefs/team-timeline.md` |
 | Create/open/write Jira ticket | `/Users/ron.yehezkel/.config/opencode/skill/atlas-skill/actions/tasks-creator.md` |
 | Slack link pasted or "analyze Slack" | `/Users/ron.yehezkel/.config/opencode/skill/atlas-skill/actions/slack-analyze.md` |
 | Databricks workflow/job run cost | `/Users/ron.yehezkel/.config/opencode/skill/atlas-skill/actions/cost-calculator.md` |
