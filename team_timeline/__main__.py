@@ -19,7 +19,7 @@ from .calendar import clip_segments_to_exclusive_end, schedule, trim_capacity_se
 from .config import DEFAULT_VIEW_DAYS, MAIN_ASSIGNEES, ON_HOLD_STATUS, OUTPUT, TIMEZONE, capacity_config, topic_rules
 from .jira_fetch import fetch_all_jira, filter_issues
 from .models import json_dumps, now_local, parse_date
-from .render import latest_mmd, render, resolve_render_topic_rules
+from .render import first_mermaid_diagram_for_smoke, latest_mmd, render, resolve_render_topic_rules
 from .state import (
     parse_tickets_markdown,
     render_tickets_markdown,
@@ -47,11 +47,13 @@ def run_preflight(args: argparse.Namespace) -> int:
     mmd = Path(args.latest_mmd) if args.latest_mmd else latest_mmd(output_root)
     if mmd and mmd.exists():
         with tempfile.TemporaryDirectory() as tmp:
+            smoke_mmd = Path(tmp) / "preflight.mmd"
+            smoke_mmd.write_text(first_mermaid_diagram_for_smoke(mmd))
             target = Path(tmp) / "preflight.png"
             started_render = time.time()
             subprocess.run(
                 OUTPUT["mermaid_command"] + [
-                    "-i", str(mmd), "-o", str(target),
+                    "-i", str(smoke_mmd), "-o", str(target),
                     "-e", "png",
                     "-b", OUTPUT["png_background"],
                     "-w", str(OUTPUT["png_width"]),

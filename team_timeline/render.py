@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
+import tempfile
 import time
+from dataclasses import replace
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
 from .calendar import (
-    mermaid_exclude_comments,
-    mermaid_excludes,
-    mermaid_weekend_directive,
+    mermaid_exclude_comments_for_strip,
+    mermaid_excludes_for_strip,
     non_working_days_in_window,
 )
 from .config import (
@@ -83,6 +85,11 @@ def build_theme_css(
         f'rect[id*="{rule.topic}_"] {{ fill: {rule.color}; stroke: {rule.color}; }}'
         for rule in rules
     ]
+    # Invisible full-strip bar so Mermaid keeps a fixed Sun–Thu (5-day) axis per weekly strip.
+    parts.append(
+        f'rect[id*="{AXIS_PAD_TASK_PREFIX}"] {{ opacity: 0 !important; stroke: none !important; }}'
+        f' g[id*="{AXIS_PAD_TASK_PREFIX}"] text {{ opacity: 0 !important; }}'
+    )
     # Ticks sit on day boundaries (midnight); shift by half a day-width to center on the column.
     if tick_label_shift_px is not None and tick_label_shift_px > 0:
         parts.append(
@@ -102,6 +109,99 @@ def gantt_domain_span_days(segments: list[Segment]) -> int:
     dom_min = min(s.start for s in segments)
     dom_max = max(s.start + timedelta(days=s.duration_days) for s in segments)
     return max(1, (dom_max - dom_min).days)
+
+
+# Mermaid gantt scales the time axis to the min/max of all tasks; this pins a fixed width.
+# Section / task ids must not be empty or leading-underscore (breaks the gantt parser).
+AXIS_PAD_SECTION = "week_axis"
+AXIS_PAD_TASK_PREFIX = "gantt_axis_pad_"
+
+
+def _gantt_task_line(
+    seg: Segment,
+    *,
+    max_c: int,
+    strip_exclusive_end: date | None = None,
+) -> str:
+    """Emit one gantt task row.
+
+    The axis pad uses **start + end date** (not ``Nd``) so the chart domain stays
+    exactly ``[strip_start, strip_exclusive_end)`` even when ``excludes`` lists
+    holidays inside that range. Per Mermaid docs, duration-based tasks extend past
+    excluded days to preserve nominal length, which would stretch the axis and
+    shrink day columns vs strips without excludes.
+    """
+    label = truncate_gantt_label_with_part(seg.label, max_c)
+    if (
+        strip_exclusive_end is not None
+        and seg.task_id.startswith(AXIS_PAD_TASK_PREFIX)
+    ):
+        last_inclusive = strip_exclusive_end - timedelta(days=1)
+        return f"    {label} :{seg.task_id}, {seg.start.isoformat()}, {last_inclusive.isoformat()}"
+    return f"    {label} :{seg.task_id}, {seg.start.isoformat()}, {seg.duration_days}d"
+
+
+def iter_sunday_thursday_strips(
+    window_start: date,
+    window_end_inclusive: date,
+) -> list[tuple[date, date]]:
+    """Sunday-aligned working-week strips overlapping [window_start, window_end_inclusive].
+
+    Each item is ``(strip_start_sunday, strip_exclusive_end)`` where the visible axis
+    is ``[strip_start_sunday, strip_exclusive_end)`` — **five** calendar days (Sunday
+    through Thursday). Friday and Saturday are not part of the Gantt domain.
+    """
+    if window_end_inclusive < window_start:
+        return []
+    # Sunday of the week containing window_start (Mon=0 … Sun=6).
+    first_sunday = window_start - timedelta(days=(window_start.weekday() + 1) % 7)
+    out: list[tuple[date, date]] = []
+    cur = first_sunday
+    while cur <= window_end_inclusive:
+        strip_exclusive_end = cur + timedelta(days=5)
+        if strip_exclusive_end > window_start and cur <= window_end_inclusive:
+            out.append((cur, strip_exclusive_end))
+        cur += timedelta(days=7)
+    return out
+
+
+def clip_segment_to_window(
+    seg: Segment,
+    win_start: date,
+    win_exclusive_end: date,
+) -> Segment | None:
+    """Intersect ``seg`` with ``[win_start, win_exclusive_end)``; drop if empty."""
+    seg_end = seg.start + timedelta(days=seg.duration_days)
+    overlap_start = max(seg.start, win_start)
+    overlap_end = min(seg_end, win_exclusive_end)
+    if overlap_start >= overlap_end:
+        return None
+    new_dur = (overlap_end - overlap_start).days
+    if new_dur < 1:
+        return None
+    if overlap_start == seg.start and new_dur == seg.duration_days:
+        return seg
+    return replace(seg, start=overlap_start, duration_days=new_dur)
+
+
+def clip_segments_to_week_window(
+    segments: list[Segment],
+    strip_start: date,
+    strip_exclusive_end: date,
+) -> list[Segment]:
+    """Clip every segment to the strip window; preserves section ordering via stable sort."""
+    out: list[Segment] = []
+    for seg in segments:
+        clipped = clip_segment_to_window(seg, strip_start, strip_exclusive_end)
+        if clipped is not None:
+            out.append(clipped)
+    return sorted(out, key=lambda s: (s.section, s.order_index, s.start, s.task_id))
+
+
+def week_strip_title(strip_start_sunday: date, strip_exclusive_end: date) -> str:
+    """Human-readable strip range for the gantt title (Sun … Thu)."""
+    last = strip_exclusive_end - timedelta(days=1)
+    return f"{OUTPUT['title']} — {strip_start_sunday.strftime('%b %d')}–{last.strftime('%b %d, %Y')}"
 
 
 def tick_label_center_shift_px(
@@ -183,6 +283,28 @@ def latest_mmd(output_root: Path) -> Path | None:
         key=lambda p: p.parent.name,
     )
     return matches[-1] if matches else None
+
+
+# Combined build output concatenates one ``%% Week strip i/n`` block per Sun–Thu strip.
+_STRIP_SPLIT = re.compile(r"\n\n(?=%% Week strip \d+/\d+:)", re.MULTILINE)
+
+
+def first_mermaid_diagram_for_smoke(mmd_path: Path) -> str:
+    """Mermaid source for a single diagram (first stacked strip), or the whole file if not multi-strip.
+
+    Leading ``%%`` lines (e.g. the ``%% Week strip i/n`` banner) are removed so the file starts
+    with ``---`` — mermaid-cli requires YAML frontmatter first.
+    """
+    text = mmd_path.read_text()
+    parts = _STRIP_SPLIT.split(text)
+    chunk = parts[0] if len(parts) > 1 else text
+    lines = chunk.strip().splitlines()
+    while lines and lines[0].strip().startswith("%%"):
+        lines.pop(0)
+    out = "\n".join(lines)
+    if not out.endswith("\n"):
+        out += "\n"
+    return out
 
 
 def _png_command(mmd_path: Path, png_path: Path) -> list[str]:
@@ -316,6 +438,105 @@ def append_topic_legend_to_png(png_path: Path, rules: list[TopicRule], *, scale:
     out.save(png_path, format="PNG")
 
 
+# Vertical gap between stacked weekly Gantt PNGs (pixels at 1×; mmdc output is scaled separately).
+WEEK_STRIP_GAP_PX = 20
+
+
+def stitch_pngs_vertical(paths: list[Path], out: Path, *, gap_px: int) -> None:
+    """Stack PNGs top-to-bottom on a shared background; centers strips if widths differ."""
+    try:
+        from PIL import Image
+    except ImportError as e:
+        raise ImportError(
+            "Stacked weekly charts require Pillow. Install with: pip install pillow"
+        ) from e
+
+    if not paths:
+        raise ValueError("stitch_pngs_vertical requires at least one PNG")
+    imgs = [Image.open(p).convert("RGB") for p in paths]
+    w = max(im.size[0] for im in imgs)
+    total_h = sum(im.size[1] for im in imgs) + gap_px * (len(imgs) - 1)
+    bg = OUTPUT["png_background"]
+    canvas = Image.new("RGB", (w, total_h), bg)
+    y = 0
+    for i, im in enumerate(imgs):
+        x = max(0, (w - im.size[0]) // 2)
+        canvas.paste(im, (x, y))
+        y += im.size[1]
+        if i < len(imgs) - 1:
+            y += gap_px
+    canvas.save(out, format="PNG")
+
+
+def build_week_mermaid(
+    segments_in_week: list[Segment],
+    rules: list[TopicRule],
+    config: CapacityConfig,
+    *,
+    title: str,
+    strip_start_sunday: date,
+    strip_exclusive_end: date,
+) -> str:
+    """One Mermaid document: Sun–Thu strip with a hidden 5-day bar for axis width (no Fri/Sat)."""
+    sections = [AXIS_PAD_SECTION] + MAIN_ASSIGNEES + [ON_HOLD_GANTT_SECTION]
+    strip_days = (strip_exclusive_end - strip_start_sunday).days
+    pad = Segment(
+        label="·",
+        task_id=f"{AXIS_PAD_TASK_PREFIX}{strip_start_sunday.isoformat()}",
+        section=AXIS_PAD_SECTION,
+        start=strip_start_sunday,
+        duration_days=strip_days,
+        order_index=0,
+    )
+    all_segments = [pad] + segments_in_week
+    by_section: dict[str, list[Segment]] = {s: [] for s in sections}
+    for seg in sorted(all_segments, key=lambda s: (s.section, s.order_index, s.start, s.task_id)):
+        by_section[seg.section].append(seg)
+
+    shift = tick_label_center_shift_px(OUTPUT["png_width"], all_segments)
+    span_days = gantt_domain_span_days(all_segments)
+    excl = mermaid_excludes_for_strip(config, strip_start_sunday, strip_exclusive_end)
+    lines = [
+        *build_mermaid_yaml_config_lines(rules, tick_label_shift_px=shift if shift > 0 else None),
+        *mermaid_exclude_comments_for_strip(config, strip_start_sunday, strip_exclusive_end),
+        "gantt",
+        f"  title {title}",
+        "  dateFormat YYYY-MM-DD",
+        "  axisFormat %A %m/%d",
+        "  tickInterval 1day",
+    ]
+    if excl:
+        lines.append(f"  excludes {excl}")
+    for section in sections:
+        lines.append(f"  section {section}")
+        for seg in by_section[section]:
+            max_c = max_chars_for_gantt_bar(
+                seg.duration_days,
+                span_days,
+                OUTPUT["png_width"],
+            )
+            lines.append(
+                _gantt_task_line(
+                    seg,
+                    max_c=max_c,
+                    strip_exclusive_end=strip_exclusive_end,
+                )
+            )
+
+    return "\n".join(lines) + "\n"
+
+
+def _run_mmdc_to_png(mmd_path: Path, png_path: Path) -> int:
+    """Invoke mermaid-cli; retry once on failure. Returns number of retries (0 or 1)."""
+    cmd = _png_command(mmd_path, png_path)
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+        return 0
+    except subprocess.CalledProcessError:
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+        return 1
+
+
 def render(
     segments: list[Segment],
     rules: list[TopicRule],
@@ -330,57 +551,46 @@ def render(
 ) -> dict[str, Any]:
     """Render segments to Mermaid + PNG.
 
+    The chart is split into Sunday–Thursday (working-week) Gantt strips stacked
+    vertically; Friday and Saturday are omitted from the axis (not greyed).
+
     Returns a dict of all pipeline metrics suitable for JSON stdout.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     mmd_path, png_path = output_paths(output_dir)
 
-    # ── Build Mermaid source ──────────────────────────────────────────────────
-    sections = MAIN_ASSIGNEES + [ON_HOLD_GANTT_SECTION]
-    by_section: dict[str, list[Segment]] = {s: [] for s in sections}
-    # Schedule order (order_index) keeps split ticket/capacity chunks consecutive in the section,
-    # not interleaved with other work by calendar start date.
-    for seg in sorted(segments, key=lambda s: (s.section, s.order_index, s.start, s.task_id)):
-        by_section[seg.section].append(seg)
+    weeks = iter_sunday_thursday_strips(window_start, window_end)
+    if not weeks:
+        weeks = [(window_start, window_start + timedelta(days=5))]
 
-    shift = tick_label_center_shift_px(OUTPUT["png_width"], segments)
-    span_days = gantt_domain_span_days(segments)
-    lines = [
-        *build_mermaid_yaml_config_lines(rules, tick_label_shift_px=shift if shift > 0 else None),
-        *mermaid_exclude_comments(config),
-        "gantt",
-        f"  title {OUTPUT['title']}",
-        "  dateFormat YYYY-MM-DD",
-        "  axisFormat %A %m/%d",
-        "  tickInterval 1day",
-        f"  excludes {mermaid_excludes(config)}",
-    ]
-    wd = mermaid_weekend_directive(config)
-    if wd:
-        lines.append(f"  weekend {wd}")
-    for section in sections:
-        lines.append(f"  section {section}")
-        for seg in by_section[section]:
-            max_c = max_chars_for_gantt_bar(
-                seg.duration_days,
-                span_days,
-                OUTPUT["png_width"],
-            )
-            label = truncate_gantt_label_with_part(seg.label, max_c)
-            lines.append(f"    {label} :{seg.task_id}, {seg.start.isoformat()}, {seg.duration_days}d")
-
-    mermaid = "\n".join(lines) + "\n"
-    mmd_path.write_text(mermaid)
-
-    # ── Render PNG (retry once on failure) ───────────────────────────────────
     render_started = time.time()
     render_retries = 0
-    cmd = _png_command(mmd_path, png_path)
-    try:
-        subprocess.run(cmd, check=True, capture_output=True, text=True)
-    except subprocess.CalledProcessError:
-        render_retries = 1
-        subprocess.run(cmd, check=True, capture_output=True, text=True)
+    mmd_blocks: list[str] = []
+    week_png_paths: list[Path] = []
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_dir = Path(tmp)
+        for i, (strip_start, strip_exclusive_end) in enumerate(weeks):
+            clipped = clip_segments_to_week_window(segments, strip_start, strip_exclusive_end)
+            title = week_strip_title(strip_start, strip_exclusive_end)
+            block = build_week_mermaid(
+                clipped,
+                rules,
+                config,
+                title=title,
+                strip_start_sunday=strip_start,
+                strip_exclusive_end=strip_exclusive_end,
+            )
+            mmd_blocks.append(f"%% Week strip {i + 1}/{len(weeks)}: {strip_start.isoformat()} (Sun–Thu) …\n{block}")
+            w_mmd = tmp_dir / f"week-{i}.mmd"
+            w_png = tmp_dir / f"week-{i}.png"
+            w_mmd.write_text(block)
+            render_retries += _run_mmdc_to_png(w_mmd, w_png)
+            week_png_paths.append(w_png)
+
+        mmd_path.write_text("\n\n".join(mmd_blocks) + "\n")
+        stitch_pngs_vertical(week_png_paths, png_path, gap_px=WEEK_STRIP_GAP_PX)
+
     append_topic_legend_to_png(png_path, rules, scale=OUTPUT["png_scale"])
     render_ms = int((time.time() - render_started) * 1000)
     total_ms = local_read_ms + jira_stats["jira_fetch_ms"] + merge_ms + render_ms
@@ -396,6 +606,7 @@ def render(
         "output_dir": output_dir.name,
         "window_start": window_start.isoformat(),
         "window_end": window_end.isoformat(),
+        "gantt_weekly_strips": len(weeks),
         "non_working_days_in_window": non_working_days_in_window(
             config, window_start, window_end
         ),

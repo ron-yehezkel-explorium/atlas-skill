@@ -279,6 +279,41 @@ def mermaid_excludes(config: CapacityConfig) -> str:
     return ",".join(parts)
 
 
+def mermaid_excludes_for_strip(
+    config: CapacityConfig,
+    strip_start: date,
+    strip_exclusive_end: date,
+) -> str:
+    """Mermaid ``excludes`` for a Sun–Thu strip only: global holidays in that date range.
+
+    The axis does not include Friday or Saturday, so the ``weekends`` keyword and
+    ``weekend`` directive are omitted — non-working Fri/Sat are absent from the chart
+    rather than greyed out.
+    """
+    parts: list[str] = []
+    for d in sorted(excluded_global_dates(config)):
+        if strip_start <= d < strip_exclusive_end:
+            parts.append(d.isoformat())
+    return ",".join(parts)
+
+
+def mermaid_exclude_comments_for_strip(
+    config: CapacityConfig,
+    strip_start: date,
+    strip_exclusive_end: date,
+) -> list[str]:
+    """``%%`` comments for holidays that fall inside this strip (for the .mmd source)."""
+    lines = [
+        "%% Grey columns: team holidays in this strip (Sun–Thu only; Fri/Sat not on axis).",
+    ]
+    for ev in config.global_non_working_days:
+        for day in event_dates(ev):
+            if strip_start <= day < strip_exclusive_end:
+                safe = ev.label.replace("\\", "\\\\").replace("%%", "")
+                lines.append(f"%% {day.isoformat()}: {safe}")
+    return lines
+
+
 def iter_dates_inclusive(start: date, end: date):
     """Yield each calendar day from start through end (inclusive)."""
     d = start

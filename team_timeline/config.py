@@ -17,8 +17,9 @@ OUTPUT = {
     "mmd_name": "team-timeline.mmd",
     "png_name": "team-timeline.png",
     "mermaid_command": ["npx", "-y", "@mermaid-js/mermaid-cli"],
-    "png_width": 5200,
-    "png_scale": 3,
+    # Diagram width (px); lower = narrower day columns on Sun–Thu strips. Tuned vs default 5200.
+    "png_width": 1400,
+    "png_scale": 2,
     "png_background": "white",
 }
 
@@ -37,7 +38,7 @@ LEGEND = {
 }
 
 # Mermaid gantt left/right padding; must match YAML `gantt.leftPadding` / `rightPadding` in render.
-GANTT_AXIS_LR_PADDING = 75
+GANTT_AXIS_LR_PADDING = 38
 # Mermaid draws labels outside bars when text is wider than the bar (ganttRenderer). We truncate
 # titles to fit the bar width; tune px/char if truncation is too aggressive or still overflows.
 GANTT_FONT_SIZE = 11
@@ -77,10 +78,11 @@ ROSTER = {
 # Topic metadata for gantt bar colours and the PNG legend.
 # New Jira issues default to ``DEFAULT_TOPIC`` until you set ``topic`` in the tickets file.
 TOPICS = [
-    {"topic": "contacts", "label": "Contacts / Firmo pipeline", "color": "#4F74FF"},
-    {"topic": "deliveries", "label": "Deliveries", "color": "#22A06B"},
+    {"topic": "contacts", "label": "Contacts", "color": "#2563EB"},
+    {"topic": "firmo", "label": "Firmographics", "color": "#9333EA"},
+    {"topic": "deliveries", "label": "Deliveries", "color": "#15803D"},
     {"topic": "tech_debt", "label": "Tech debt", "color": "#FF9F1C"},
-    {"topic": "other", "label": "Other", "color": "#7C6CF2"},
+    {"topic": "other", "label": "Other", "color": "#64748B"},
     {"topic": "capacity", "label": "Capacity", "color": "#8B8FA3"},
     {"topic": "on_hold", "label": "On Hold", "color": "#C44569"},
 ]
