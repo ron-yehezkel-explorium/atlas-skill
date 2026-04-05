@@ -70,13 +70,14 @@ User-requested format overrides take precedence.
 - Slack MCP tools (`slack_*`) for Slack data — only after local repo and Jira signals are exhausted or when the question is explicitly about Slack conversations.
 - Atlassian MCP tools (`atlassian_jira_*`) for Jira.
 - Local `git log` for repository signals.
-- Execute workflow steps directly — no helper scripts.
+- Execute workflow steps directly unless a workflow explicitly specifies a bundled runner. Prefer bundled runners for recurring workflows that sync state, compute derived outputs, and write multiple artifacts.
 
 ## Performance
 
 - **Jira first, Slack lazy.** Complete all Jira queries/enrichment before invoking Slack. Only touch Slack when the workflow explicitly requires it (e.g., deep dive).
 - **Local repos before Slack.** For project/code questions, check `git log --oneline --since="<window>" <repo_path>` first. Slack is a fallback, not the primary signal for code activity.
 - **Parallel enrichment is mandatory.** Batch all `view` calls together, then all `comment list` calls.
+- **Keep stateful local runs local.** Do not hand off end-to-end local workflow runs to a general subagent when the parent already has the required tools, context, and write scope.
 
 ## Guards
 
