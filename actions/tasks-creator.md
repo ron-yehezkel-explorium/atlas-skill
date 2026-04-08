@@ -7,6 +7,7 @@ Any request to create/open/write a new Jira ticket/task/bug/issue.
 
 ## Write Permission Guard
 - WRITE operations → **only** when user explicitly requests with words like "create", "open", "file", "add ticket"
+- **Never** call Jira create/update tools until the user has given **explicit approval** (see [Approval before creation](#approval-before-creation)).
 - "X is broken" → investigate only, do NOT create a ticket
 - When unclear → default to READ
 
@@ -55,9 +56,42 @@ Requested via Slack: <permalink>   ← include only when a Slack link is availab
 
 ---
 
+## Approval before creation
+
+1. Decide every field value you will pass to the Jira create API (project, issue type, summary, full description with all sections, parent, assignee, priority, labels, components, or any other field the tool supports for this project).
+2. **Before approval**, show **all** of those fields in one place, in plain text, using a fixed outline so nothing is implied or hidden:
+   - List each field by name with its final value (or explicit `Omit` / `None` when the field is intentionally unset).
+   - Include the full `description` body (Context, Motivation, DOD, optional Slack line)—not a summary of it.
+   - If you are not setting a field that the create call could accept, still list it as `Omit` so the user sees the complete picture.
+3. **Do not** call any Jira create or bulk-create tools until after step 2 is complete in the chat.
+4. **Stop and wait** until the user explicitly approves creation. Accept only clear intent to proceed (e.g. “approve”, “yes create it”, “go ahead”, “looks good, create the ticket”). Do not infer approval from unrelated replies or from the initial “create a ticket” request alone.
+5. If the user asks for edits, revise any affected fields, show the **full** field list again (step 2), then wait for approval again.
+6. **Only after explicit approval** on the latest full field list (after any rounds of step 5) → use Atlassian MCP Jira create tools with exactly those approved values.
+
+If the user declines or stops responding, do not create the issue.
+
+Example shape for the pre-approval block (adjust fields to match the actual create payload):
+
+```text
+--- Fields to be created ---
+project: ATB
+type: Task
+summary: ...
+description:
+  [full text including Context / Motivation / DOD / optional Slack line]
+parent: ATB-XXXX | Omit
+assignee: ... | Omit
+priority: ... | Omit
+labels: ... | Omit
+[any other fields]: ... | Omit
+----------------------------
+```
+
+---
+
 ## Create Request
 
-Use Atlassian MCP Jira create tools (`atlassian_jira_*`) with these fields:
+After [approval](#approval-before-creation), use Atlassian MCP Jira create tools (`atlassian_jira_*`) with these fields:
 
 ```text
 project: ATB

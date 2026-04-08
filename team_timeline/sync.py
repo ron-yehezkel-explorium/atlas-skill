@@ -1,21 +1,13 @@
 """Merge Jira-fetched issues with local canonical ticket state.
 
-Preserves local ordering, assignee overrides, topic overrides, and estimations.
-Only syncs title, status, labels, and last_synced from Jira.
+Preserves local ordering, assignee overrides, and estimations.
+Syncs title, status, labels, Type (Jira field), and last_synced from Jira.
 """
 
 from __future__ import annotations
 
-from .config import (
-    DEFAULT_TOPIC, ON_HOLD_SECTION, ON_HOLD_STATUS,
-    STATUSES, TIMEZONE, UNASSIGNED_SENTINEL, section_names_for_status,
-)
+from .config import MAIN_ASSIGNEES, STATUSES, TIMEZONE
 from .models import JiraIssue, Ticket, now_iso
-
-
-def effective_section(ticket: Ticket) -> str:
-    """Return the rendered section key for a ticket (shared for On Hold, else assignee)."""
-    return ON_HOLD_SECTION if ticket.status == ON_HOLD_STATUS else ticket.assignee
 
 
 def merge_tickets(
@@ -24,74 +16,60 @@ def merge_tickets(
 ) -> tuple[dict[str, dict[str, list[Ticket]]], dict[str, int]]:
     """Merge Jira issues with local ticket state.
 
+    The canonical markdown file is the allowlist: only keys listed there are synced and
+    written back. Jira issues not present locally are ignored (no auto-import).
+
     Strategy:
-    - Existing tickets: preserve assignee, topic, estimation; update title, status, labels.
-    - New tickets: ``topic`` = ``DEFAULT_TOPIC`` until edited in the tickets file; estimation=1.
-    - Removed tickets (no longer in Jira): dropped silently.
-    - Local file order is preserved for existing tickets; new tickets are inserted
-      at the position nearest to their Jira rank neighbours.
+    - For each local ticket key, if Jira still has the issue: preserve assignee,
+      estimation, parent_epic; update title, status, labels, jira_type (Type field), last_synced from Jira.
+    - If the issue disappeared from Jira: drop it (counts as removed).
+    - Local ordering is preserved; within each status/assignee bucket, Jira rank is used
+      to interleave keys when the file order is incomplete.
     """
     synced_at = now_iso(TIMEZONE)
     existing_by_key = {t.key: t for t in existing}
     fetched_by_key = {issue.key: issue for status in STATUSES for issue in fetched[status]}
     merged: dict[str, Ticket] = {}
 
-    new_tickets = 0
-    auto_estimation_count = 0
-
-    for key, issue in fetched_by_key.items():
-        if key in existing_by_key:
-            original = existing_by_key[key]
-            merged[key] = Ticket(
-                key=key,
-                title=issue.title,
-                assignee=original.assignee,
-                topic=original.topic,
-                status=issue.status,
-                parent_epic=original.parent_epic,
-                labels=issue.labels,
-                estimation=original.estimation,
-                last_synced=synced_at,
-                group_status=issue.status,
-                group_assignee=effective_section(original),
-            )
-        else:
-            assignee = issue.assignee or UNASSIGNED_SENTINEL
-            merged[key] = Ticket(
-                key=key,
-                title=issue.title,
-                assignee=assignee,
-                topic=DEFAULT_TOPIC,
-                status=issue.status,
-                parent_epic="",
-                labels=issue.labels,
-                estimation=1,
-                last_synced=synced_at,
-                group_status=issue.status,
-                group_assignee=ON_HOLD_SECTION if issue.status == ON_HOLD_STATUS else assignee,
-            )
-            new_tickets += 1
-            auto_estimation_count += 1
+    for key, original in existing_by_key.items():
+        issue = fetched_by_key.get(key)
+        if issue is None:
+            continue
+        merged[key] = Ticket(
+            key=key,
+            title=issue.title,
+            assignee=original.assignee,
+            jira_type=issue.jira_type,
+            status=issue.status,
+            parent_epic=original.parent_epic,
+            labels=issue.labels,
+            estimation=original.estimation,
+            last_synced=synced_at,
+            group_status=issue.status,
+            group_assignee=original.assignee,
+        )
 
     removed_tickets = sum(1 for t in existing if t.key not in merged)
 
-    # Rebuild ordered key lists: existing order first, then insert new tickets
-    # at their Jira-rank-relative position within each section.
+    # Rebuild ordered key lists: existing file order first, then Jira-rank inserts
+    # for keys missing from the initial pass (normally none once allowlist-only).
     ordered: dict[str, dict[str, list[str]]] = {
-        status: {section: [] for section in section_names_for_status(status)}
+        status: {section: [] for section in MAIN_ASSIGNEES}
         for status in STATUSES
     }
     for ticket in existing:
         if ticket.key not in merged:
             continue
         current = merged[ticket.key]
-        ordered[current.status][effective_section(current)].append(ticket.key)
+        ordered[current.status][current.assignee].append(ticket.key)
 
     for status in STATUSES:
-        by_section: dict[str, list[str]] = {section: [] for section in section_names_for_status(status)}
+        by_section: dict[str, list[str]] = {section: [] for section in MAIN_ASSIGNEES}
         for issue in fetched[status]:
+            if issue.key not in merged:
+                continue
             ticket = merged[issue.key]
-            by_section[effective_section(ticket)].append(issue.key)
+            by_section[ticket.assignee].append(issue.key)
         for section, rank_keys in by_section.items():
             current = ordered[status][section][:]
             present = set(current)
@@ -115,11 +93,11 @@ def merge_tickets(
             ordered[status][section] = current
 
     materialized: dict[str, dict[str, list[Ticket]]] = {
-        status: {section: [] for section in section_names_for_status(status)}
+        status: {section: [] for section in MAIN_ASSIGNEES}
         for status in STATUSES
     }
     for status in STATUSES:
-        for section in section_names_for_status(status):
+        for section in MAIN_ASSIGNEES:
             for key in ordered[status][section]:
                 ticket = merged[key]
                 ticket.group_status = status
@@ -127,11 +105,12 @@ def merge_tickets(
                 materialized[status][section].append(ticket)
 
     stats = {
-        "synced_in_progress": len(fetched["In Progress"]),
-        "synced_to_do": len(fetched["To Do"]),
-        "synced_on_hold": len(fetched[ON_HOLD_STATUS]),
-        "new_tickets": new_tickets,
+        "synced_in_progress": sum(
+            len(materialized["In Progress"][s]) for s in MAIN_ASSIGNEES
+        ),
+        "synced_to_do": sum(len(materialized["To Do"][s]) for s in MAIN_ASSIGNEES),
+        "new_tickets": 0,
         "removed_tickets": removed_tickets,
-        "auto_estimation_count": auto_estimation_count,
+        "auto_estimation_count": 0,
     }
     return materialized, stats

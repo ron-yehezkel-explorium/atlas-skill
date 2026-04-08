@@ -1,11 +1,11 @@
 """Static configuration for the team timeline pipeline.
 
-Edit this file to change topics, capacity, holidays, on-call rotation, or Jira defaults.
+Edit this file to change capacity, holidays, on-call rotation, Jira field ids, or output settings.
 """
 
 from __future__ import annotations
 
-from .models import CapacityConfig, CapacityEvent, TopicRule
+from .models import CapacityConfig, CapacityEvent, TypeRule, type_id_from_jira_label
 
 TIMEZONE = "Asia/Jerusalem"
 DEFAULT_VIEW_DAYS = 30
@@ -16,6 +16,7 @@ OUTPUT = {
     "title": "Team Timeline",
     "mmd_name": "team-timeline.mmd",
     "png_name": "team-timeline.png",
+    "html_name": "team-timeline.html",
     "mermaid_command": ["npx", "-y", "@mermaid-js/mermaid-cli"],
     # Diagram width (px); lower = narrower day columns on Sun–Thu strips. Tuned vs default 5200.
     "png_width": 1400,
@@ -23,9 +24,9 @@ OUTPUT = {
     "png_background": "white",
 }
 
-# Strip appended below the Mermaid PNG: swatches + topic labels (see ``append_topic_legend_to_png``).
+# Strip appended below the Mermaid PNG: swatches + Type labels (see ``append_type_legend_to_png``).
 LEGEND = {
-    "title": "Topic colors",
+    "title": "Type colors",
     "padding": 24,
     "title_font_size": 16,
     "font_size": 14,
@@ -44,7 +45,14 @@ GANTT_AXIS_LR_PADDING = 38
 GANTT_FONT_SIZE = 11
 # CSS font-weight for task row labels (Mermaid classes taskText / taskTextOutside*).
 GANTT_TASK_TITLE_FONT_WEIGHT = 700
-GANTT_BAR_HEIGHT = 24
+GANTT_BAR_HEIGHT = 28
+# Mermaid default is 4; vertical space between consecutive task rows.
+GANTT_BAR_GAP = 12
+# White outline so adjacent bars (incl. same color on one row in compact mode) stay distinct.
+GANTT_BAR_STROKE = "#ffffff"
+GANTT_BAR_STROKE_WIDTH = 6
+# True = ``displayMode: compact`` (tasks share rows when possible). White stroke still separates segments.
+GANTT_COMPACT_MODE = True
 GANTT_LABEL_PX_PER_CHAR = 5.5
 GANTT_LABEL_CHAR_MARGIN = 2
 
@@ -53,19 +61,25 @@ JIRA = {
     "site": "exploriumai.atlassian.net",
     "project": "ATB",
     "board_id": "154",
-    "tracked_statuses": ["In Progress", "To Do", "On Hold"],
+    "tracked_statuses": ["In Progress", "To Do"],
     "search_page_size": 200,
+    # ``type_field_id`` is appended at fetch time (see ``jira_fetch._jira_search_fields``).
     "search_fields": "key,summary,labels,assignee,status,issuetype",
+    # Required single-select “Type” on ATB work items (option ``value`` strings drive colours + legend).
+    "type_field_id": "customfield_10264",
+    # Used with REST createmeta when ``use_createmeta_for_type_order`` is True.
+    "createmeta_issue_type_id": "10157",
+    # If True, legend colour order follows Jira’s full Type option list (createmeta). If False (default),
+    # only Type values present on fetched issues are used — avoids legacy option names cluttering the legend.
+    "use_createmeta_for_type_order": False,
     "status_jql": {
         "In Progress": 'project = ATB AND status = "In Progress" ORDER BY Rank ASC',
         "To Do": 'project = ATB AND status = "To Do" ORDER BY Rank ASC',
-        "On Hold": 'project = ATB AND status = "On Hold" ORDER BY Rank ASC',
     },
 }
 
 ROSTER = {
     "main_assignees": ["ron", "yaara", "rani", "itai", "danielle", "unassigned"],
-    "on_hold_assignees": ["shared"],
     "aliases": {
         "ron": {"ron", "ron yehezkel", "ron.yehezkel", "ron.yehezkel@explorium.ai", "@ron.yehezkel"},
         "yaara": {"yaara", "yaara yona", "yaara.yona", "yaara.yona@explorium.ai", "@yaara.yona"},
@@ -75,17 +89,23 @@ ROSTER = {
     },
 }
 
-# Topic metadata for gantt bar colours and the PNG legend.
-# New Jira issues default to ``DEFAULT_TOPIC`` until you set ``topic`` in the tickets file.
-TOPICS = [
-    {"topic": "contacts", "label": "Contacts", "color": "#2563EB"},
-    {"topic": "firmo", "label": "Firmographics", "color": "#9333EA"},
-    {"topic": "deliveries", "label": "Deliveries", "color": "#15803D"},
-    {"topic": "tech_debt", "label": "Tech debt", "color": "#FF9F1C"},
-    {"topic": "other", "label": "Other", "color": "#64748B"},
-    {"topic": "capacity", "label": "Capacity", "color": "#8B8FA3"},
-    {"topic": "on_hold", "label": "On Hold", "color": "#C44569"},
-]
+# Jira Type colours by slug (``type_id_from_jira_label``). Keys must match how Jira option names slugify.
+# Very light, high-luminance pastels for maximum on-screen pop vs dark bar text (#0f172a).
+TYPE_COLOR_BY_SLUG: dict[str, str] = {
+    "contacts": "#ffc8e4",       # cotton-candy pink
+    "firmo": "#edc8ff",          # bright lavender
+    "firmographics": "#edc8ff",
+    "delivery": "#a8ffd0",     # neon mint
+    "deliveries": "#a8ffd0",
+    "other": "#ffffff",
+    "tech": "#fff9a8",           # light lemon
+    "tech_debt": "#fff9a8",
+    "data": "#b8ecff",           # icy sky blue
+}
+DEFAULT_TYPE_COLOR = "#e8f7ff"  # airy blue for unmapped types
+
+# Synthetic capacity / on-call / PTO rows (not a Jira Type).
+CAPACITY_TYPE_RULE = TypeRule(type_id="capacity", label="Capacity", color="#eef2f9")
 
 # Non-working calendar (grey gantt columns + scheduling skips):
 # - working_days: which weekdays count toward ticket effort (see schedule/allocate_segments).
@@ -97,9 +117,7 @@ TOPICS = [
 CAPACITY = {
     "working_days": ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday"],
     "weekend_days": ["Friday", "Saturday"],
-    "global_non_working_days": [
-        {"start_date": "2026-04-16", "duration_days": 1, "label": "Team day"},
-    ],
+    "global_non_working_days": [],
     "on_call": {
         "changeover": "Tuesday 12:00",
         "representation_label": "On-call",
@@ -108,8 +126,12 @@ CAPACITY = {
         "rotation_order": ["ron", "yaara", "rani", "itai", "danielle"],
     },
     "per_person_capacity_events": {
-        "ron": [{"start_date": "2026-04-06", "duration_days": 1, "label": "Ron vacation"}],
-        "yaara": [], "rani": [], "itai": [], "danielle": [], "unassigned": [],
+        "ron": [{"start_date": "2026-04-08", "duration_days": 1, "label": "Team holiday"}],
+        "yaara": [{"start_date": "2026-04-08", "duration_days": 1, "label": "Team holiday"}],
+        "rani": [],
+        "itai": [{"start_date": "2026-04-08", "duration_days": 1, "label": "Team holiday"}],
+        "danielle": [{"start_date": "2026-04-08", "duration_days": 1, "label": "Team holiday"}],
+        "unassigned": [{"start_date": "2026-04-08", "duration_days": 1, "label": "Team holiday"}],
     },
 }
 
@@ -117,27 +139,43 @@ CAPACITY = {
 
 STATUSES: list[str] = JIRA["tracked_statuses"]
 MAIN_ASSIGNEES: list[str] = ROSTER["main_assignees"]
-ON_HOLD_ASSIGNEES: list[str] = ROSTER["on_hold_assignees"]
+
+# Omit these assignee rows from the chart only (markdown + Jira still use full roster).
+GANTT_EXCLUDE_LANES: frozenset[str] = frozenset({"ron"})
+GANTT_LANE_ASSIGNEES: list[str] = [a for a in MAIN_ASSIGNEES if a not in GANTT_EXCLUDE_LANES]
 
 # Sentinel strings — all team-specific literals live here, nowhere else.
-ON_HOLD_STATUS: str = "On Hold"                   # Jira status name for on-hold tickets
-ON_HOLD_SECTION: str = ON_HOLD_ASSIGNEES[0]       # sections dict key for the on-hold pool
-ON_HOLD_GANTT_SECTION: str = "on_hold"            # Mermaid segment.section for the on-hold lane
 UNASSIGNED_SENTINEL: str = "unassigned"           # fallback assignee for unknown/null Jira users
 UNRESOLVABLE_NAMES: frozenset[str] = frozenset({"former user", "unassigned"})  # treated as unassigned
-DEFAULT_TOPIC: str = "other"                      # fallback topic for unclassified tickets
-
-
-def section_names_for_status(status: str) -> list[str]:
-    """Return the section names (assignee pools) for a status bucket."""
-    return ON_HOLD_ASSIGNEES if status == ON_HOLD_STATUS else MAIN_ASSIGNEES
+DEFAULT_JIRA_TYPE: str = "Other"                  # fallback if Type is missing in Jira or locally
 
 
 # ── Factory functions ─────────────────────────────────────────────────────────
 
-def topic_rules() -> list[TopicRule]:
-    """Instantiate TopicRule objects from the TOPICS config."""
-    return [TopicRule(**item) for item in TOPICS]
+def color_for_jira_type_label(label: str) -> str:
+    """Resolved fill for a Jira Type option name."""
+    lid = type_id_from_jira_label(label)
+    return TYPE_COLOR_BY_SLUG.get(lid, DEFAULT_TYPE_COLOR)
+
+
+def type_rules_for_jira_labels(ordered_labels: list[str]) -> list[TypeRule]:
+    """Build TypeRule rows for each Jira Type option label (exact Jira ``value`` strings)."""
+    rules: list[TypeRule] = []
+    for label in ordered_labels:
+        lid = type_id_from_jira_label(label)
+        rules.append(
+            TypeRule(
+                type_id=lid,
+                label=label.strip(),
+                color=color_for_jira_type_label(label),
+            )
+        )
+    return rules
+
+
+def default_type_rules_with_capacity(ordered_jira_labels: list[str]) -> list[TypeRule]:
+    """Palette rules for all Jira types plus the synthetic capacity lane."""
+    return [*type_rules_for_jira_labels(ordered_jira_labels), CAPACITY_TYPE_RULE]
 
 
 def capacity_config() -> CapacityConfig:

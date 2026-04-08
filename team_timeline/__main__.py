@@ -4,6 +4,7 @@ Usage (from atlas-skill root):
     python3 -m team_timeline build   --tickets reference/team-timeline-tickets.md --output-root output
     python3 -m team_timeline build   ... --local-only   # no Jira; does not rewrite tickets file
     python3 -m team_timeline preflight --tickets reference/team-timeline-tickets.md --output-root output
+    # preflight writes output/preflight-smoke.png (first weekly strip from latest .mmd)
 """
 
 from __future__ import annotations
@@ -16,10 +17,25 @@ from datetime import timedelta
 from pathlib import Path
 
 from .calendar import clip_segments_to_exclusive_end, schedule, trim_capacity_segments_after_chart_end
-from .config import DEFAULT_VIEW_DAYS, MAIN_ASSIGNEES, ON_HOLD_STATUS, OUTPUT, TIMEZONE, capacity_config, topic_rules
-from .jira_fetch import fetch_all_jira, filter_issues
+from .config import (
+    DEFAULT_JIRA_TYPE,
+    DEFAULT_VIEW_DAYS,
+    JIRA,
+    MAIN_ASSIGNEES,
+    OUTPUT,
+    STATUSES,
+    TIMEZONE,
+    capacity_config,
+    default_type_rules_with_capacity,
+)
+from .jira_fetch import (
+    fetch_all_jira,
+    fetch_jira_type_labels_from_createmeta,
+    filter_issues,
+    ordered_jira_type_labels,
+)
 from .models import json_dumps, now_local, parse_date
-from .render import first_mermaid_diagram_for_smoke, latest_mmd, render, resolve_render_topic_rules
+from .render import first_mermaid_diagram_for_smoke, latest_mmd, render, resolve_render_type_rules
 from .state import (
     parse_tickets_markdown,
     render_tickets_markdown,
@@ -38,22 +54,25 @@ def run_preflight(args: argparse.Namespace) -> int:
 
     parse_started = time.time()
     tickets = parse_tickets_markdown(tickets_path)
-    rules = topic_rules()
+    ordered = sorted({t.jira_type for t in tickets}) or [DEFAULT_JIRA_TYPE]
+    rules = default_type_rules_with_capacity(ordered)
     config = capacity_config()
     parse_ms = int((time.time() - parse_started) * 1000)
 
     render_ms = 0
     rendered = False
+    smoke_png: Path | None = None
     mmd = Path(args.latest_mmd) if args.latest_mmd else latest_mmd(output_root)
     if mmd and mmd.exists():
+        output_root.mkdir(parents=True, exist_ok=True)
+        smoke_png = output_root / "preflight-smoke.png"
         with tempfile.TemporaryDirectory() as tmp:
             smoke_mmd = Path(tmp) / "preflight.mmd"
             smoke_mmd.write_text(first_mermaid_diagram_for_smoke(mmd))
-            target = Path(tmp) / "preflight.png"
             started_render = time.time()
             subprocess.run(
                 OUTPUT["mermaid_command"] + [
-                    "-i", str(smoke_mmd), "-o", str(target),
+                    "-i", str(smoke_mmd), "-o", str(smoke_png),
                     "-e", "png",
                     "-b", OUTPUT["png_background"],
                     "-w", str(OUTPUT["png_width"]),
@@ -62,13 +81,14 @@ def run_preflight(args: argparse.Namespace) -> int:
                 check=True, capture_output=True, text=True,
             )
             render_ms = int((time.time() - started_render) * 1000)
-            rendered = target.exists()
+            rendered = smoke_png.exists()
 
     print(json_dumps({
         "ok": True,
         "tickets_count": len(tickets),
-        "topics_count": len(rules),
+        "types_count": len(rules),
         "render_smoke_succeeded": rendered,
+        "smoke_png": str(smoke_png) if smoke_png else None,
         "latest_mmd": mmd.name if mmd else None,
         "working_days": config.working_days,
         "weekend_days": config.weekend_days,
@@ -83,11 +103,20 @@ def _jira_stats_stub() -> dict[str, int]:
     return {"jira_calls": 0, "jira_pages": 0, "enrichment_calls": 0, "jira_fetch_ms": 0}
 
 
+def _distinct_jira_types_from_sections(sections: dict[str, dict[str, list]]) -> list[str]:
+    """Type labels present on merged tickets only (matches bars and legend)."""
+    found: set[str] = set()
+    for status in STATUSES:
+        for lane in MAIN_ASSIGNEES:
+            for ticket in sections[status][lane]:
+                found.add(ticket.jira_type)
+    return sorted(found) or [DEFAULT_JIRA_TYPE]
+
+
 def _merge_stats_from_sections(sections: dict) -> dict[str, int]:
     return {
         "synced_in_progress": sum(len(v) for v in sections["In Progress"].values()),
         "synced_to_do": sum(len(v) for v in sections["To Do"].values()),
-        "synced_on_hold": sum(len(v) for v in sections[ON_HOLD_STATUS].values()),
         "new_tickets": 0,
         "removed_tickets": 0,
         "auto_estimation_count": 0,
@@ -102,7 +131,6 @@ def run_build(args: argparse.Namespace) -> int:
 
     read_started = time.time()
     existing = parse_tickets_markdown(tickets_path)
-    config_rules = topic_rules()
     config = capacity_config()
     local_read_ms = int((time.time() - read_started) * 1000)
 
@@ -112,13 +140,23 @@ def run_build(args: argparse.Namespace) -> int:
         sections = sections_from_flat_tickets(existing)
         merge_stats = _merge_stats_from_sections(sections)
         merge_ms = int((time.time() - merge_started) * 1000)
+        flat_types = sorted({t.jira_type for t in existing}) or [DEFAULT_JIRA_TYPE]
+        # Local-only: palette follows Type values present in the tickets file (no createmeta).
+        config_rules = default_type_rules_with_capacity(flat_types)
     else:
-        issues_by_status, parent_keys_with_subtasks, jira_stats = fetch_all_jira()
-        filtered = filter_issues(issues_by_status, parent_keys_with_subtasks)
+        issues_by_status, jira_stats = fetch_all_jira()
+        filtered = filter_issues(issues_by_status)
 
         merge_started = time.time()
         sections, merge_stats = merge_tickets(existing, filtered)
         merge_ms = int((time.time() - merge_started) * 1000)
+        if JIRA.get("use_createmeta_for_type_order"):
+            meta = fetch_jira_type_labels_from_createmeta()
+            type_label_order = ordered_jira_type_labels(filtered, meta)
+        else:
+            # Only Jira Type values on allowlisted tickets — no legacy createmeta-only option names.
+            type_label_order = _distinct_jira_types_from_sections(sections)
+        config_rules = default_type_rules_with_capacity(type_label_order)
 
     window_start = parse_date(args.window_start) if args.window_start else now_local(TIMEZONE).date()
     oncall_horizon = window_start + timedelta(days=DEFAULT_VIEW_DAYS)
@@ -156,7 +194,7 @@ def run_build(args: argparse.Namespace) -> int:
     view_capped = natural_exclusive_end > chart_exclusive_end
     segments = clip_segments_to_exclusive_end(segments, chart_exclusive_end)
 
-    display_rules = resolve_render_topic_rules(config_rules, config_rules, segments)
+    display_rules = resolve_render_type_rules(config_rules, config_rules, segments)
     if not args.local_only:
         tickets_path.write_text(render_tickets_markdown(sections))
 

@@ -18,7 +18,7 @@ class Ticket:
     key: str
     title: str
     assignee: str
-    topic: str
+    jira_type: str
     status: str
     parent_epic: str
     labels: list[str]
@@ -29,9 +29,9 @@ class Ticket:
 
 
 @dataclass
-class TopicRule:
-    """Topic metadata for gantt styling (colour, legend); ids match per-ticket ``topic`` in markdown."""
-    topic: str
+class TypeRule:
+    """Jira Type field styling (colour, legend). ``type_id`` is a slug; ``label`` matches Jira’s option name."""
+    type_id: str
     label: str
     color: str
 
@@ -68,6 +68,8 @@ class JiraIssue:
     status: str
     issue_type: str
     labels: list[str]
+    is_subtask_issue: bool
+    jira_type: str
 
 
 @dataclass
@@ -79,6 +81,9 @@ class Segment:
     start: date
     duration_days: int
     order_index: int
+    # HTML / PNG bar text is compact; ``tooltip`` holds full title (and key) for hover.
+    tooltip: str = ""
+    type_id: str = "other"
 
 
 # ── Lookup tables ─────────────────────────────────────────────────────────────
@@ -116,6 +121,51 @@ def sanitize_label(value: str) -> str:
     value = value.replace(":", " - ").replace("`", "")
     value = value.replace("\n", " ").replace("\r", " ")
     return normalize_whitespace(value)
+
+
+def type_id_from_jira_label(value: str) -> str:
+    """Stable slug for Mermaid task ids / CSS; mirrors Jira’s display name without unsafe characters."""
+    raw = normalize_whitespace(value) if value else ""
+    if not raw:
+        return "other"
+    s = raw.lower()
+    s = re.sub(r"[^a-z0-9]+", "_", s)
+    s = s.strip("_")
+    return s or "other"
+
+
+def ticket_bar_display_label(ticket: Ticket) -> str:
+    """Compact bar text: Jira issue title only (PNG/HTML/Mermaid gantt labels)."""
+    return sanitize_label(normalize_whitespace(ticket.title))
+
+
+def ticket_tooltip_text(ticket: Ticket) -> str:
+    """Multi-line hover body: labels, parent id/name, key/title, assignee, estimation, status."""
+    labs = ", ".join(ticket.labels) if ticket.labels else "—"
+    raw = (ticket.parent_epic or "").strip().strip('"').strip("'")
+    if not raw:
+        parent_line = "— - —"
+    elif ":" in raw:
+        pid = raw.split(":", 1)[0].strip()
+        pname = raw.split(":", 1)[1].strip()
+        parent_line = f"{pid} - {pname}" if pname else f"{pid} - —"
+    else:
+        parent_line = f"— - {raw}"
+    title_s = sanitize_label(ticket.title)
+    return (
+        f"({labs})\n"
+        f"{parent_line}\n"
+        f"{ticket.key} - {title_s}\n"
+        f"{ticket.assignee}\n"
+        f"type: {ticket.jira_type}\n"
+        f"estimation: {ticket.estimation}\n"
+        f"status: {ticket.status}"
+    )
+
+
+def capacity_tooltip_text(lane: str, capacity_label: str) -> str:
+    """Multi-line hover for on-call / PTO / holiday capacity segments."""
+    return f"{capacity_label}\nlane: {lane}\ntype: capacity"
 
 
 def truncate_gantt_label(label: str, max_chars: int) -> str:

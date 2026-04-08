@@ -5,9 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .config import (
-    DEFAULT_TOPIC, STATUSES, UNASSIGNED_SENTINEL, section_names_for_status,
-)
+from .config import DEFAULT_JIRA_TYPE, MAIN_ASSIGNEES, STATUSES, UNASSIGNED_SENTINEL
 from .models import Ticket
 
 def parse_tickets_markdown(path: Path) -> list[Ticket]:
@@ -40,11 +38,12 @@ def parse_tickets_markdown(path: Path) -> list[Ticket]:
                     k, v = field_line.split(":", 1)
                     block[k.strip()] = v.strip()
                 i += 1
+            raw_type = block.get("type")
             tickets.append(Ticket(
                 key=block["key"],
                 title=block.get("title", ""),
                 assignee=block.get("assignee", UNASSIGNED_SENTINEL),
-                topic=block.get("topic", DEFAULT_TOPIC),
+                jira_type=raw_type if raw_type else DEFAULT_JIRA_TYPE,
                 status=block.get("status", status),
                 parent_epic=block.get("parent_epic", ""),
                 labels=json.loads(block.get("labels", "[]") or "[]"),
@@ -61,7 +60,7 @@ def parse_tickets_markdown(path: Path) -> list[Ticket]:
 def sections_from_flat_tickets(tickets: list[Ticket]) -> dict[str, dict[str, list[Ticket]]]:
     """Rebuild merge-shaped sections from a flat parse (file order preserved per bucket)."""
     sections: dict[str, dict[str, list[Ticket]]] = {
-        status: {name: [] for name in section_names_for_status(status)}
+        status: {name: [] for name in MAIN_ASSIGNEES}
         for status in STATUSES
     }
     for t in tickets:
@@ -88,15 +87,14 @@ def render_tickets_markdown(
     ]
     for status in STATUSES:
         lines.extend([f"## {status}", ""])
-        section_names = section_names_for_status(status)
-        for section in section_names:
+        for section in MAIN_ASSIGNEES:
             lines.extend([f"### {section}", ""])
             for ticket in sections[status][section]:
                 lines.extend([
                     f"- key: {ticket.key}",
                     f"  title: {ticket.title}",
                     f"  assignee: {ticket.assignee}",
-                    f"  topic: {ticket.topic}",
+                    f"  type: {ticket.jira_type}",
                     f"  status: {ticket.status}",
                     f"  parent_epic: {ticket.parent_epic}",
                     f"  labels: {json.dumps(ticket.labels, ensure_ascii=False)}",

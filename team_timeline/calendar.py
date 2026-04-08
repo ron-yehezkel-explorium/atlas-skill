@@ -5,12 +5,15 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import date, timedelta
 
-from .config import (
-    MAIN_ASSIGNEES, ON_HOLD_GANTT_SECTION, ON_HOLD_SECTION, ON_HOLD_STATUS,
-)
+from .config import GANTT_LANE_ASSIGNEES, MAIN_ASSIGNEES
 from .models import (
     CapacityConfig, CapacityEvent, NAME_TO_WEEKDAY, Segment, Ticket,
-    parse_date, sanitize_label,
+    capacity_tooltip_text,
+    parse_date,
+    sanitize_label,
+    ticket_bar_display_label,
+    ticket_tooltip_text,
+    type_id_from_jira_label,
 )
 
 
@@ -68,6 +71,37 @@ def collapse_dates(days: list[date], working_weekdays: set[int], excluded: set[d
 
 def next_weekday_on_or_after(start: date, weekday: int) -> date:
     return start + timedelta(days=(weekday - start.weekday()) % 7)
+
+
+def capacity_event_is_oncall(ev: CapacityEvent, config: CapacityConfig) -> bool:
+    """True for generated on-call rotation blocks (matches ``representation_label``)."""
+    return (ev.label or "").strip() == (config.representation_label or "").strip()
+
+
+def _segment_sort_key(seg: Segment) -> tuple[date, str]:
+    return (seg.start, seg.task_id)
+
+
+def merge_lane_segment_order(
+    ip_segs: list[Segment],
+    oncall_segs: list[Segment],
+    other_cap_segs: list[Segment],
+    td_segs: list[Segment],
+) -> list[Segment]:
+    """Gantt row order: in-progress tickets, then on-call, then other capacity, then to-do.
+
+    If there is no in-progress work, on-call leads (so it does not list above tickets that
+    start after it). Calendar dates are unchanged; only ``order_index`` is reassigned.
+    """
+    ip_segs = sorted(ip_segs, key=_segment_sort_key)
+    oncall_segs = sorted(oncall_segs, key=_segment_sort_key)
+    other_cap_segs = sorted(other_cap_segs, key=_segment_sort_key)
+    td_segs = sorted(td_segs, key=_segment_sort_key)
+    if ip_segs:
+        merged = ip_segs + oncall_segs + other_cap_segs + td_segs
+    else:
+        merged = oncall_segs + other_cap_segs + td_segs
+    return [replace(seg, order_index=i) for i, seg in enumerate(merged, start=1)]
 
 
 # ── On-call generation ────────────────────────────────────────────────────────
@@ -149,59 +183,123 @@ def schedule(
     """Schedule all tickets and capacity events into gantt Segments.
 
     On-call events are generated only up to `oncall_horizon` (near-term window).
-    All work tickets are scheduled without a cutoff — every ticket appears.
+    All work tickets in gantt-visible lanes are scheduled without a cutoff (see ``GANTT_EXCLUDE_LANES``).
+
+    Lane **row order** (``order_index``): in-progress ticket chunks first, then on-call, then other
+    capacity (PTO/holidays), then to-do tickets. If there is no in-progress ticket, on-call rows come
+    first so on-call does not sit above unrelated to-dos. Calendar start dates and blocking are unchanged.
     """
     segments: list[Segment] = []
     working_weekdays = weekday_indexes(config.working_days)
     excluded = excluded_global_dates(config)
     oncall = generate_oncall_events(config, start, oncall_horizon)
 
-    for lane in MAIN_ASSIGNEES:
+    for lane in GANTT_LANE_ASSIGNEES:
         cursor = start
-        order = 1
-        events = config.per_person_capacity_events.get(lane, []) + oncall.get(lane, [])
+        events = (config.per_person_capacity_events.get(lane) or []) + (oncall.get(lane) or [])
         lane_blocked = blocked_dates(events)
 
-        for event in sorted(events, key=lambda e: parse_date(e.start_date) if isinstance(e.start_date, str) else e.start_date):
+        other_events = [e for e in events if not capacity_event_is_oncall(e, config)]
+        oncall_events = [e for e in events if capacity_event_is_oncall(e, config)]
+        other_cap_segs: list[Segment] = []
+        oncall_segs: list[Segment] = []
+        cap_order = 0
+
+        for event in sorted(
+            other_events,
+            key=lambda e: parse_date(e.start_date) if isinstance(e.start_date, str) else e.start_date,
+        ):
+            cap_order += 1
             chunks = collapse_dates(event_dates(event), working_weekdays, excluded)
             for idx, (chunk_start, duration) in enumerate(chunks, start=1):
-                segments.append(Segment(
-                    label=segment_label(event.label, len(chunks), idx),
-                    task_id=f"capacity_{lane}_{order}_{idx}",
-                    section=lane,
-                    start=chunk_start,
-                    duration_days=duration,
-                    order_index=order,
-                ))
-            order += 1
+                cap_lbl = segment_label(event.label, len(chunks), idx)
+                other_cap_segs.append(
+                    Segment(
+                        label=cap_lbl,
+                        task_id=f"capacity_{lane}_{cap_order}_{idx}",
+                        section=lane,
+                        start=chunk_start,
+                        duration_days=duration,
+                        order_index=0,
+                        tooltip=capacity_tooltip_text(lane, cap_lbl),
+                        type_id="capacity",
+                    )
+                )
 
-        for ticket in sections["In Progress"][lane] + sections["To Do"][lane]:
-            chunks, cursor = allocate_segments(cursor, ticket.estimation, lane_blocked, working_weekdays, excluded)
+        for event in sorted(
+            oncall_events,
+            key=lambda e: parse_date(e.start_date) if isinstance(e.start_date, str) else e.start_date,
+        ):
+            cap_order += 1
+            chunks = collapse_dates(event_dates(event), working_weekdays, excluded)
             for idx, (chunk_start, duration) in enumerate(chunks, start=1):
-                segments.append(Segment(
-                    label=segment_label(sanitize_label(ticket.title), len(chunks), idx),
-                    task_id=f"{ticket.topic}_{ticket.key}_{order}_{idx}",
-                    section=lane,
-                    start=chunk_start,
-                    duration_days=duration,
-                    order_index=order,
-                ))
-            order += 1
+                cap_lbl = segment_label(event.label, len(chunks), idx)
+                oncall_segs.append(
+                    Segment(
+                        label=cap_lbl,
+                        task_id=f"capacity_{lane}_{cap_order}_{idx}",
+                        section=lane,
+                        start=chunk_start,
+                        duration_days=duration,
+                        order_index=0,
+                        tooltip=capacity_tooltip_text(lane, cap_lbl),
+                        type_id="capacity",
+                    )
+                )
 
-    shared_cursor = start
-    order = 1
-    for ticket in sections[ON_HOLD_STATUS][ON_HOLD_SECTION]:
-        chunks, shared_cursor = allocate_segments(shared_cursor, ticket.estimation, set(), working_weekdays, excluded)
-        for idx, (chunk_start, duration) in enumerate(chunks, start=1):
-            segments.append(Segment(
-                label=segment_label(sanitize_label(ticket.title), len(chunks), idx),
-                task_id=f"{ON_HOLD_GANTT_SECTION}_{ticket.key}_{order}_{idx}",
-                section=ON_HOLD_GANTT_SECTION,
-                start=chunk_start,
-                duration_days=duration,
-                order_index=order,
-            ))
-        order += 1
+        ip_segs: list[Segment] = []
+        td_segs: list[Segment] = []
+        ticket_order = 0
+
+        for ticket in sections["In Progress"][lane]:
+            ticket_order += 1
+            tid = type_id_from_jira_label(ticket.jira_type)
+            chunks, cursor = allocate_segments(
+                cursor, ticket.estimation, lane_blocked, working_weekdays, excluded
+            )
+            for idx, (chunk_start, duration) in enumerate(chunks, start=1):
+                short_lbl = ticket_bar_display_label(ticket)
+                base_lbl = segment_label(short_lbl, len(chunks), idx)
+                tip = ticket_tooltip_text(ticket)
+                ip_segs.append(
+                    Segment(
+                        label=base_lbl,
+                        task_id=f"{tid}_{ticket.key}_{ticket_order}_{idx}",
+                        section=lane,
+                        start=chunk_start,
+                        duration_days=duration,
+                        order_index=0,
+                        tooltip=tip,
+                        type_id=tid,
+                    )
+                )
+
+        for ticket in sections["To Do"][lane]:
+            ticket_order += 1
+            tid = type_id_from_jira_label(ticket.jira_type)
+            chunks, cursor = allocate_segments(
+                cursor, ticket.estimation, lane_blocked, working_weekdays, excluded
+            )
+            for idx, (chunk_start, duration) in enumerate(chunks, start=1):
+                short_lbl = ticket_bar_display_label(ticket)
+                base_lbl = segment_label(short_lbl, len(chunks), idx)
+                tip = ticket_tooltip_text(ticket)
+                td_segs.append(
+                    Segment(
+                        label=base_lbl,
+                        task_id=f"{tid}_{ticket.key}_{ticket_order}_{idx}",
+                        section=lane,
+                        start=chunk_start,
+                        duration_days=duration,
+                        order_index=0,
+                        tooltip=tip,
+                        type_id=tid,
+                    )
+                )
+
+        segments.extend(
+            merge_lane_segment_order(ip_segs, oncall_segs, other_cap_segs, td_segs)
+        )
 
     return segments
 
