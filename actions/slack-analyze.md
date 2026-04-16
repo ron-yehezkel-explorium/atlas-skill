@@ -8,14 +8,16 @@ Extract channel ID and message timestamp from the permalink.
 
 **Format:** `https://<workspace>.slack.com/archives/<CHANNEL_ID>/p<TS_NO_DOT>`
 
-The workspace subdomain varies (e.g., `exploriumai`, `goldinai`, etc.) — do not hardcode it.
+The workspace subdomain varies (e.g., `goldinai`) — do not hardcode a different host. Preserve the host from the user's pasted link exactly.
 
 **Parsing rule:** strip `p` prefix, insert `.` before the last 6 digits → Slack API `ts`.
 
-Example: `https://exploriumai.slack.com/archives/C011J4X9414/p1709472135123456`
+Example: `https://goldinai.slack.com/archives/C011J4X9414/p1709472135123456`
 → channel = `C011J4X9414`, ts = `1709472135.123456`
 
 If the link doesn't match the expected format, ask the user to re-paste it.
+
+If you need to reconstruct a permalink for output, use the thread root timestamp (`thread_ts` if present, otherwise message `ts`) so the link opens the correct thread.
 
 ## Step 1: Fetch the Discussion
 
@@ -23,6 +25,8 @@ Use Slack MCP tools. Run these in parallel:
 
 1. **Thread replies** — `slack_conversations_replies` with the parsed `channel_id` and `thread_ts`. Set `limit` to `90d` to capture the full thread.
 2. **Channel name** — Use `slack_conversations_search_messages` with the original Slack permalink URL as the `search_query`. This returns a single message with the `#channel-name` in the `Channel` column — the most reliable method. **Fallback:** if the search returns nothing, try `slack_channels_list` or use the raw channel ID.
+
+Treat `slack_conversations_search_messages(search_query=<permalink>)` as the permalink validation step too. If a generated or repaired permalink does not resolve, rebuild it from the thread root timestamp and retry once before showing it to the user.
 
 If `slack_conversations_replies` returns nothing or only one message, the link may point to a standalone message (no thread). In that case, present what's available and note: `"This is a standalone message, not a threaded discussion."`
 
@@ -89,6 +93,7 @@ Rules:
 - Summarize long messages (>5 lines) but keep technical details intact.
 - Note file attachments inline with `[N files attached]` when present.
 - Flag unresolved questions, action items, and decisions.
+- When showing the discussion link, echo the original validated permalink from the user input. Do not swap hosts.
 
 ## Step 4: Execute the Requested Action
 
@@ -97,7 +102,7 @@ The user will specify what they need. Match intent and execute:
 | Intent | Behavior |
 |---|---|
 | **Formulate a response / reply** | Draft a reply matching Ron's tone (direct, technical, concise). Provide 1-2 variants if the situation is nuanced. Include relevant context from Jira/git if the discussion references tickets or code. |
-| **Understand / summarize** | Provide a structured summary: what's being discussed, key positions, unresolved points, and any decisions made. |
+| **Understand / summarize** | Start with a `### Simple Explanation` section in plain language: 3-5 short sentences, minimal jargon, answer only `what happened`, `why it matters`, and `whether this looks like a new breakage or an existing gap`. Then provide the structured summary: what's being discussed, key positions, unresolved points, and any decisions made. |
 | **Investigate / solve** | Identify the technical problem from the thread. Search local repos (`git log`, code), Jira (Atlassian MCP), and Databricks if relevant. Propose a solution with evidence. |
 | **Draft an update** | Compose a status update or follow-up message based on the thread context and any new information from Jira/git. |
 | **Identify action items** | Extract all explicit and implicit action items, assign owners where clear, flag unowned items. |
@@ -148,6 +153,8 @@ After building the digest (Step 3), proceed automatically:
 
 **Sources:** <all tools/data used>
 ```
+
+Make `### What's happening` readable by a non-expert first. If technical terms are needed, explain them in simple words in the same sentence instead of assuming prior context.
 
 Separate confirmed evidence from hypotheses. Use tables for structured data.
 When a specific data table is involved, always show a sample (`SELECT * ... LIMIT 5`) so the table structure is visible.

@@ -43,7 +43,7 @@ Independently of Steps 2–3, run a **workspace-wide** Slack search in the same 
 - **Scope:** all channels the token can search — not limited to the seed list or to `@atlas-oncall` traffic.
 - **Include** root posts and thread replies where the mention appears.
 - **Deduplicate** by `(channel, thread_ts or message ts)`; if the same thread hits multiple times, keep one row (latest relevant activity or the message that contains the mention).
-- **Permalink** each row (same format as Step 3).
+- **Permalink** each row using the thread root timestamp (`thread_ts` if present, else message `ts`) and validate it the same way as Step 3.
 
 This feed is for the **Tagged me** table in the output only. It does not replace the Issues relevance gate: Issues still follow Step 3 rules for `@atlas-oncall` / seed alerts.
 
@@ -58,15 +58,17 @@ For each channel: fetch messages in the time window and **all thread replies**.
 
 Drop everything else.
 
-**Permalink requirement:** For every collected root message, construct the Slack permalink:
+**Permalink requirement:** For every collected root message, construct the Slack permalink using the runtime default workspace URL from the system prompt unless this run started from a user-pasted Slack permalink, in which case preserve that host exactly:
 
 ```
-https://exploriumai.slack.com/archives/<CHANNEL_ID>/p<ts_without_dot>
+https://<workspace>.slack.com/archives/<CHANNEL_ID>/p<TS_NO_DOT>
 ```
 
-Example: channel `C011J4X9414`, ts `1709472135.123456` → `https://exploriumai.slack.com/archives/C011J4X9414/p1709472135123456`
+Example: channel `C011J4X9414`, ts `1709472135.123456` → `https://goldinai.slack.com/archives/C011J4X9414/p1709472135123456`
 
-Store this permalink — it is **mandatory** in the output card. If you cannot construct it, note `[link unavailable]` but never omit the field.
+Use the **thread root timestamp** for threaded conversations: `thread_ts` when present, otherwise message `ts`. This ensures the link opens the correct thread, not an arbitrary reply.
+
+Validate every generated permalink with `slack_conversations_search_messages(search_query=<permalink>)` before rendering it. If validation fails, rebuild from the thread root timestamp and retry once. If it still fails, note `[link unavailable]` but never omit the field.
 
 ## Step 4: Issue Extraction & Deduplication
 
@@ -166,7 +168,7 @@ Sorted: open/investigating/known first (🔴/🟡), then resolved (✅). Most re
 
 ✅ **GOOD — THIS IS THE REQUIRED FORMAT:**
 ```
-**1. Emlite DPD failures (match_prospect, google_news_genai)** — 🔴 Open — [Slack](https://exploriumai.slack.com/archives/C011J4X9414/p1709472135123456)
+**1. Emlite DPD failures (match_prospect, google_news_genai)** — 🔴 Open — [Slack](https://goldinai.slack.com/archives/C011J4X9414/p1709472135123456)
 **Summary:** DPD enrichment pipeline failing for match_prospect and google_news_genai providers; jobs erroring out with timeout exceptions during entity resolution.
 **When:** Mar 3, 07:22 PM
 **Channel:** #issues-data

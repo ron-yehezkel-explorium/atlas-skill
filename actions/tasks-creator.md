@@ -136,7 +136,7 @@ DOD
 - ...
 - ...
 
-Requested via Slack: https://goldinai.slack.com/archives/CHANNEL/pTIMESTAMP
+Requested via Slack: https://<workspace>.slack.com/archives/<CHANNEL_ID>/p<TS_NO_DOT>
 parent: ATB-XXXX
 assignee: @me
 additional_fields: {"customfield_10264": {"value": "Data"}}
@@ -145,6 +145,7 @@ additional_fields: {"customfield_10264": {"value": "Data"}}
 `parent` is the epic connection. Omit if no epic applies.
 `topic` is required — always include `customfield_10264` in `additional_fields`.
 For bugs use `type: Bug`.
+If the task came from Slack, preserve the exact host from the user-pasted Slack link when one exists. If you have to construct the link yourself, use the runtime default workspace URL, prefer `thread_ts` over a reply `ts`, and validate it with `slack_conversations_search_messages` before writing it into the Jira description.
 
 ## Default Status
 

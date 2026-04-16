@@ -29,6 +29,7 @@ Source of truth for person resolution.
 - Timezone: `Asia/Jerusalem` (Israel Time). All times displayed to the user must be in this timezone. Convert UTC timestamps from APIs/databases before rendering.
 - Jira project: `ATB`
 - Jira board id: `154`
+- Slack workspace URL: `https://goldinai.slack.com`
 - Databricks warehouse id: `2dfc33368ea84f86`
 - Local repos for team brief:
   - `/Users/ron.yehezkel/CursorProjects/tube-projects`
@@ -85,6 +86,8 @@ User-requested format overrides take precedence.
 - **Date window:** Default to today (start-of-day to now). Window doesn't include today = warn: "Time window does not cover today — verify intent."
 - **No silent fallbacks:** Missing file = abort with exact path. Never glob for alternatives.
 - **Workflow file is mandatory:** You MUST read the matching workflow file from the table above BEFORE taking any action. Do not skip this step.
+- **Slack permalinks:** Always emit full `https://<workspace>.slack.com/archives/<CHANNEL_ID>/p<TS_NO_DOT>` links. Preserve the host from a user-pasted Slack link when one exists; otherwise use the runtime default workspace URL. For threaded messages, link to the thread root with `thread_ts` when present, otherwise use the message `ts`.
+- **Slack permalink validation:** Before presenting a generated Slack link, validate it with `slack_conversations_search_messages(search_query=<permalink>)`. If it does not resolve, rebuild it from the thread root timestamp and retry once before showing `[link unavailable]`.
 
 ## Error Handling
 
