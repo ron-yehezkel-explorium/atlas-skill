@@ -7,6 +7,7 @@ Goal: scan channels where @atlas-oncall is active, analyze issues in the request
 Use defaults from your system prompt unless user overrides.
 
 - On-call usergroup ID: `S0227A6C3BQ` (`@atlas-oncall`)
+- On-call person’s Slack user ID: resolve from the team roster (`slack_user_id` for whoever is on-call in Step 1). Example: `U088JLP938B` (`@ron.yehezkel`).
 - On-call rotation channel: `C04DKFGBQNR` (`#atlas-internal`)
 - Databricks warehouse ID: `2dfc33368ea84f86`
 
@@ -34,6 +35,17 @@ Run in parallel:
 | #atlas-dpd-public | resolve at runtime |
 
 **Dynamic discovery:** Search Slack for messages mentioning `S0227A6C3BQ` in the time window. Merge with seed list and deduplicate.
+
+## Step 2b: Personal mentions (all channels)
+
+Independently of Steps 2–3, run a **workspace-wide** Slack search in the same time window for messages that **@mention the current on-call person** (their `slack_user_id` from the roster, e.g. `<@U088JLP938B>` in search queries).
+
+- **Scope:** all channels the token can search — not limited to the seed list or to `@atlas-oncall` traffic.
+- **Include** root posts and thread replies where the mention appears.
+- **Deduplicate** by `(channel, thread_ts or message ts)`; if the same thread hits multiple times, keep one row (latest relevant activity or the message that contains the mention).
+- **Permalink** each row (same format as Step 3).
+
+This feed is for the **Tagged me** table in the output only. It does not replace the Issues relevance gate: Issues still follow Step 3 rules for `@atlas-oncall` / seed alerts.
 
 ## Step 3: Message Collection
 
@@ -114,6 +126,9 @@ Add findings to the issue description.
 ## Issues
 <numbered stacked cards — open first, then resolved>
 ---
+## Tagged me (all channels)
+<table from Step 2b only — see below>
+---
 ## Deep Dive
 ```
 
@@ -164,6 +179,17 @@ Sorted: open/investigating/known first (🔴/🟡), then resolved (✅). Most re
 If you produce single-line bullets instead of full cards, your output is **invalid**. Go back and re-render.
 
 **Every card MUST include ALL of:** Slack permalink, Summary, When, Channel, Triggered by, Owner, Response. A card missing any of these is invalid — go back and fetch the data.
+
+### Tagged me (all channels)
+
+A **markdown table** built **only** from Step 2b (personal `@` mentions of the on-call person across the workspace). Do not mix in Issues-only rows unless that row also had a personal mention.
+
+| When | Channel | Summary | Slack |
+|---|---|---|---|
+| `<Mon DD, HH:MM AM/PM>` | `#channel` | One short line: what the thread is about | `[link](<permalink>)` |
+
+- Sort **most recent first**.
+- If there were no personal mentions in the window, output the section header and a single line: `None in this window.`
 
 ### Status Emojis
 

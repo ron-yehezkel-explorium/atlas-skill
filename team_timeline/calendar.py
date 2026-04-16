@@ -69,6 +69,25 @@ def collapse_dates(days: list[date], working_weekdays: set[int], excluded: set[d
     return chunks
 
 
+def calendar_consecutive_chunks(days: list[date]) -> list[tuple[date, int]]:
+    """Consecutive calendar-day runs (for team-wide holidays on ``excluded`` dates)."""
+    if not days:
+        return []
+    sd = sorted(set(days))
+    chunks: list[tuple[date, int]] = []
+    start = sd[0]
+    length = 1
+    for prev, cur in zip(sd, sd[1:]):
+        if cur == prev + timedelta(days=1):
+            length += 1
+        else:
+            chunks.append((start, length))
+            start = cur
+            length = 1
+    chunks.append((start, length))
+    return chunks
+
+
 def next_weekday_on_or_after(start: date, weekday: int) -> date:
     return start + timedelta(days=(weekday - start.weekday()) % 7)
 
@@ -204,6 +223,27 @@ def schedule(
         other_cap_segs: list[Segment] = []
         oncall_segs: list[Segment] = []
         cap_order = 0
+
+        for event in sorted(
+            config.global_non_working_days,
+            key=lambda e: parse_date(e.start_date) if isinstance(e.start_date, str) else e.start_date,
+        ):
+            cap_order += 1
+            chunks = calendar_consecutive_chunks(event_dates(event))
+            for idx, (chunk_start, duration) in enumerate(chunks, start=1):
+                cap_lbl = segment_label(event.label, len(chunks), idx)
+                other_cap_segs.append(
+                    Segment(
+                        label=cap_lbl,
+                        task_id=f"capacity_{lane}_{cap_order}_{idx}",
+                        section=lane,
+                        start=chunk_start,
+                        duration_days=duration,
+                        order_index=0,
+                        tooltip=capacity_tooltip_text(lane, cap_lbl),
+                        type_id="capacity",
+                    )
+                )
 
         for event in sorted(
             other_events,

@@ -117,7 +117,9 @@ CAPACITY_TYPE_RULE = TypeRule(type_id="capacity", label="Capacity", color="#eef2
 CAPACITY = {
     "working_days": ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday"],
     "weekend_days": ["Friday", "Saturday"],
-    "global_non_working_days": [],
+    "global_non_working_days": [
+        {"start_date": "2026-04-21", "duration_days": 2, "label": "Holiday"},
+    ],
     "on_call": {
         "changeover": "Tuesday 12:00",
         "representation_label": "On-call",
@@ -128,7 +130,7 @@ CAPACITY = {
     "per_person_capacity_events": {
         "ron": [{"start_date": "2026-04-08", "duration_days": 1, "label": "Team holiday"}],
         "yaara": [{"start_date": "2026-04-08", "duration_days": 1, "label": "Team holiday"}],
-        "rani": [],
+        "rani": [{"start_date": "2026-04-16", "duration_days": 8, "label": "Vacation"}],
         "itai": [{"start_date": "2026-04-08", "duration_days": 1, "label": "Team holiday"}],
         "danielle": [{"start_date": "2026-04-08", "duration_days": 1, "label": "Team holiday"}],
         "unassigned": [{"start_date": "2026-04-08", "duration_days": 1, "label": "Team holiday"}],

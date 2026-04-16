@@ -21,6 +21,30 @@ Default: `Task`
 ## Board
 Always `ATB`.
 
+## Topic (MANDATORY)
+
+Every ATB issue **must** have a Topic (`customfield_10264`, cascading select).
+
+Allowed values (closed list — do not invent new ones):
+| Value | Use when |
+|---|---|
+| Contacts | Contacts pipeline, prospects, person-level data |
+| Data | Data pipelines, ingestion, quality, enrichment, EDS |
+| Delivery | Customer delivery, exports, integrations |
+| Firmo | Firmographic data, company-level attributes |
+| Tech | Infrastructure, tooling, CI/CD, platform, frameworks |
+| Other | Anything that doesn't fit the above categories |
+
+**Selection rules:**
+1. Infer from context (summary, description, related epic).
+2. If ambiguous, ask the user before creating.
+3. Never omit — the Jira create call will fail without it.
+
+**API format** (inside `additional_fields`):
+```json
+{"customfield_10264": {"value": "<Topic>"}}
+```
+
 ## Priority
 Set only if explicitly mentioned or obviously urgent. Otherwise omit.
 
@@ -77,6 +101,7 @@ Example shape for the pre-approval block (adjust fields to match the actual crea
 project: ATB
 type: Task
 summary: ...
+topic: Data | Contacts | Delivery | Firmo | Tech | Other   ← MANDATORY
 description:
   [full text including Context / Motivation / DOD / optional Slack line]
 parent: ATB-XXXX | Omit
@@ -97,6 +122,7 @@ After [approval](#approval-before-creation), use Atlassian MCP Jira create tools
 project: ATB
 type: Task
 summary: Action-first short title
+topic: Data                          ← MANDATORY, pass via additional_fields
 description: Context
 
 ...
@@ -113,9 +139,11 @@ DOD
 Requested via Slack: https://goldinai.slack.com/archives/CHANNEL/pTIMESTAMP
 parent: ATB-XXXX
 assignee: @me
+additional_fields: {"customfield_10264": {"value": "Data"}}
 ```
 
 `parent` is the epic connection. Omit if no epic applies.
+`topic` is required — always include `customfield_10264` in `additional_fields`.
 For bugs use `type: Bug`.
 
 ## Default Status
@@ -126,4 +154,4 @@ New tasks land in **Review** by default (board column configuration). Do NOT man
 
 ## Verify
 
-Use Atlassian MCP Jira view tools to verify `summary`, `parent`, `status` (should be `Review`), and `description` on the created issue.
+Use Atlassian MCP Jira view tools to verify `summary`, `parent`, `status` (should be `Review`), `customfield_10264` (Topic), and `description` on the created issue.
