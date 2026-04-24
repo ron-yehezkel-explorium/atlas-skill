@@ -60,6 +60,7 @@ Identify intent from the user's message, then load **exactly one** workflow file
 | Databricks workflow/job run cost | `/Users/ron.yehezkel/.config/opencode/skill/atlas-skill/actions/cost-calculator.md` |
 | "self-improve" / meta-feedback | `/Users/ron.yehezkel/.config/opencode/skill/atlas-skill/actions/self-improver.md` |
 | Weekly/team Databricks cost report | `/Users/ron.yehezkel/.config/opencode/skill/atlas-skill/briefs/cost-brief.md` |
+| Atlas architecture / repo map / cross-repo integration | `/Users/ron.yehezkel/.config/opencode/skill/atlas-skill/reference/atlas-repo-map.md` |
 | EC2 pricing reference (used by cost workflows) | `/Users/ron.yehezkel/.config/opencode/skill/atlas-skill/reference/ec2-pricing.md` |
 
 No known workflow? Answer from the knowledge base above + tools only.

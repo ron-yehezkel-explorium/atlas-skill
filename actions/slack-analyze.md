@@ -1,6 +1,13 @@
 # Workflow: Slack Discussion Analyzer
 
-Goal: fetch a Slack thread from a pasted link, read the full discussion, then execute the user's requested action (formulate a response, summarize, investigate, etc.).
+Goal: fetch a Slack thread from a pasted link, explain what it is about in simple English, investigate only as much as needed, then execute the user's requested action (formulate a response, summarize, investigate, etc.).
+
+## Core Principles
+
+1. **Short answer first.** Start with 2-3 short paragraphs explaining what the thread is about, what the issue is, which components matter, and the best current explanation.
+2. **Investigate only as needed.** Use Slack + local repos + git/Jira first. Use Databricks, Datadog, and GitHub only when they are needed to answer the core question.
+3. **Data requires samples.** If Databricks or another data source is used, show a small sample of actual data/output, not just table names or schemas.
+4. **Avoid redundant structure.** Do not output metadata tables, key-example tables, or timelines unless they add new information.
 
 ## Step 0: Parse the Slack Link
 
@@ -44,58 +51,81 @@ For user IDs that only appear in **@mentions** (not as message authors), the CSV
 
 Display format: `**Name** (role if known)` for team members, `**Display Name**` for external/unknown, `U0XXXXXXXX (unresolved)` for mention-only IDs that couldn't be resolved.
 
-## Step 3: Build Discussion Digest
+## Step 3: Build the Short Explanation
 
-Produce a structured digest before executing the user's action. Lead with the **issue**, not the metadata.
+Start with a short plain-English explanation. This is the main answer unless the user asked for a deeper investigation.
 
-```
-## Discussion Digest
-
-### What's Going On
-
-<2-4 sentence plain-English explanation of the issue/topic. No jargon unless unavoidable.
-Answer: What broke / what's being discussed? Who triggered it? Who's the customer (if any)?>
-
-| Field | Detail |
-|---|---|
-| **Channel** | #<channel_name> |
-| **Reported by** | **<author>** — <date, time> |
-| **Customer** | <customer name if mentioned, otherwise "Internal" or "N/A"> |
-| **Participants** | <list> |
-| **Thread length** | <N> messages |
-| **Attachments** | <total file count, or "None"> |
-| **Link** | <original permalink> |
-
-### Key Examples
-
-Show concrete evidence from the thread — error messages, affected records, screenshots described, etc. Use a table when there are multiple data points:
-
-| Example | Detail |
-|---|---|
-| Error message | `<exact error text>` |
-| Affected entity | <customer / table / job / endpoint> |
-| Symptom | <what the user observed> |
-| Frequency / scope | <how often, how many affected> |
-
-If there's a single clear example, a fenced code block or quote is fine instead of a table.
-
----
-
-### Deep Dive — Thread Timeline
-
-1. **<author>** (<relative time>): <message summary> [N files attached]
-2. ...
-```
+Cover:
+- what the discussion is about
+- what the actual issue/question is
+- which customer/component/system is involved
+- the best current explanation, clearly marked as confirmed or hypothesis
 
 Rules:
-- **Lead with the issue, not the timeline.** The reader should understand the problem within 10 seconds.
-- Preserve code blocks, links, and file references from messages.
-- Summarize long messages (>5 lines) but keep technical details intact.
-- Note file attachments inline with `[N files attached]` when present.
-- Flag unresolved questions, action items, and decisions.
-- When showing the discussion link, echo the original validated permalink from the user input. Do not swap hosts.
+- Keep this to 2-3 short paragraphs.
+- Explain components as if the reader has no project context.
+- Preserve exact error text, IDs, links, and file references only when they matter.
+- Flag unresolved questions and clear action items.
+- Echo the original validated permalink if showing the link.
 
-## Step 4: Execute the Requested Action
+### Normalize Slack Evidence Before Writing
+
+Before building the brief, normalize noisy Slack content:
+
+- Detect forwarded/copied Slack snippets such as `Author: ...`, `Text: ...`, `Footer: ...` and restate them as normal evidence.
+- Separate **thread authors** from **mentioned users**.
+- Extract concrete artifacts when present: customer names, IDs, URLs, repo names, service names, job IDs, table names, Jira tickets, timestamps, errors.
+- For tiny threads (2-4 messages), avoid outputting a full timeline unless the timing itself matters.
+
+## Step 3b: Decide Whether to Investigate More
+
+After the short explanation, investigate only if the thread cannot be answered confidently or the user asked for it.
+
+Default order:
+1. Slack thread evidence
+2. local repos and git history
+3. Jira / PR context
+4. Databricks only when production data is required
+5. Datadog only for runtime/log/incident questions
+6. GitHub only when local repo evidence is insufficient
+
+### Databricks gate
+
+Use Databricks only when the core unresolved question is about actual data state: IDs, rows, counts, batch output, customer delivery files, or production validation. If Databricks is not clearly required, stop after the explanation and offer: `I can validate this in Databricks next if you want.`
+
+When Databricks is used, always include:
+- what table/model/job was checked
+- what it is in simple English
+- the query or inspection method
+- a small sample of the actual data/output
+
+## Step 4: Write the Conclusion
+
+If deeper investigation was performed, add a short conclusion covering what was confirmed, what is still uncertain, the best explanation, and the next action. Do not repeat the thread.
+
+## Step 4b: Offer Follow-up Options
+
+After a successful analysis of the full thread, always offer exactly three ways to continue and recommend the best one for this case.
+
+```
+## Suggested Next Step
+
+I recommend: <Option 1/2/3> — <one short reason>
+
+Choose one:
+1. **Simple Slack response** — draft a concise reply Ron can paste back into Slack.
+2. **Deep check with tools** — continue investigating with targeted tools such as Jira, other Slack channels, local repos/git, Datadog logs, and Databricks queries when needed.
+3. **Heavy Databricks notebook investigation** — run a longer full analysis, create a Databricks notebook with read-only queries and evidence, then return a summary plus notebook link so Ron can inspect and continue manually in Databricks.
+```
+
+Recommendation rules:
+- Recommend **Option 1** when the thread is mostly coordination, status, or a simple answer is enough.
+- Recommend **Option 2** when there is a real unresolved technical question but it can likely be answered with targeted checks.
+- Recommend **Option 3** only for complex data investigations that need repeatable SQL, multiple samples, historical comparisons, or a handoff artifact in Databricks.
+- Do not run Options 2 or 3 unless the user chooses them or explicitly asks for deeper validation.
+- Option 3 must use read-only Databricks operations only.
+
+## Step 5: Execute the Requested Action
 
 The user will specify what they need. Match intent and execute:
 
@@ -106,73 +136,67 @@ The user will specify what they need. Match intent and execute:
 | **Investigate / solve** | Identify the technical problem from the thread. Search local repos (`git log`, code), Jira (Atlassian MCP), and Databricks if relevant. Propose a solution with evidence. |
 | **Draft an update** | Compose a status update or follow-up message based on the thread context and any new information from Jira/git. |
 | **Identify action items** | Extract all explicit and implicit action items, assign owners where clear, flag unowned items. |
+| **Heavy Databricks notebook investigation** | Create a read-only Databricks notebook that runs the full analysis with queries, samples, and explanation. Return a short summary and the notebook link. |
 
-If the intent is unclear, present the digest (Step 3) and ask: `"What would you like me to do with this discussion?"` with the options above.
+If the intent is unclear, present the brief (Step 3), investigation (Step 3b), and analysis summary (Step 4), then ask: `"What would you like me to do with this discussion?"` with the options above.
 
-## Step 4b: Bare Link — Deep Investigation
+## Step 5b: Bare Link — Deep Investigation
 
-When the user pastes **only a Slack link with no additional text**, treat it as: "deeply investigate the issue described in this thread."
+When the user pastes **only a Slack link with no additional text**, treat it as: "explain this thread and do a reasonable first-pass investigation." Do not automatically run every tool.
 
-After building the digest (Step 3), proceed automatically:
+After Step 3, inspect local repo/git/Jira only if the thread references a technical component, customer issue, ticket, deploy, or data artifact. Use Databricks/Datadog only if gated by Step 3b.
 
-1. **Extract signals** — pull every technical clue from the thread: error messages, timestamps, service/repo names, job IDs, ticket refs, customer names, stack traces.
-2. **Investigate in parallel** — use all relevant tools:
-
-| Tool | When |
-|---|---|
-| **Local repos** (`git log`, code search) | Thread mentions a service, repo, or recent deploy |
-| **Databricks CLI** | Data pipeline issues, job failures, query errors |
-| **Datadog** (if available) | Logs, metrics, error spikes around the reported timestamps |
-| **Jira** (Atlassian MCP) | Related tickets, recent changes, known issues |
-| **GitHub** (`gh`) | Recent PRs, deploys, config changes |
-
-3. **Follow the chain** — if one tool's output points somewhere else (e.g., a log references a commit, a job failure references a table), follow it.
-4. **Stop** when the picture is clear or signals are exhausted.
-
-### Output format for bare-link investigation
+### Output format for bare-link analysis
 
 ```
-## Issue Summary
+## What this thread is about
+<2-3 short paragraphs>
 
-### What's happening
-<2-4 sentence plain-English description>
+## Best current explanation
+<short conclusion, clearly separating confirmed facts from hypotheses>
 
-### Key signals
-- <bullet list: errors, symptoms, affected systems, timestamps>
+## Supporting checks
+<only include if performed>
 
-## Investigation
+## Next step
+<one suggested action, or offer Databricks/Datadog validation if not yet used>
 
-<Keep it readable and display using tables if is the case>
-
-### Analysis
-<Connect the dots — root cause, timeline, blast radius>
-
-### Recommended Next Steps
-1. <actionable step>
-2. ...
+## Suggested next step
+<recommend one of the three follow-up options and list all three>
 
 **Sources:** <all tools/data used>
 ```
 
-Make `### What's happening` readable by a non-expert first. If technical terms are needed, explain them in simple words in the same sentence instead of assuming prior context.
+Separate confirmed evidence from hypotheses. Use tables only for structured data that adds clarity. When a specific data table is queried, show a small sample.
 
-Separate confirmed evidence from hypotheses. Use tables for structured data.
-When a specific data table is involved, always show a sample (`SELECT * ... LIMIT 5`) so the table structure is visible.
-
-## Step 5: Output
+## Step 6: Output
 
 Structure the final output as:
 
 ```
 # Slack Analysis — #<channel_name>
 
-<Discussion Digest from Step 3>
+## What this thread is about
+<2-3 short paragraphs>
 
----
+## Best current explanation
+<short conclusion>
+
+## Supporting checks
+<only if performed>
 
 ## <Action Label> (e.g., "Draft Reply", "Summary", "Investigation")
 
 <Action output>
+
+## Suggested Next Step
+
+I recommend: <Option 1/2/3> — <one short reason>
+
+Choose one:
+1. **Simple Slack response** — draft a concise reply Ron can paste back into Slack.
+2. **Deep check with tools** — targeted follow-up using Jira, other Slack channels, local repos/git, Datadog, and Databricks only when needed.
+3. **Heavy Databricks notebook investigation** — create a Databricks notebook with read-only analysis, samples, summary, and notebook link.
 
 ---
 
@@ -199,3 +223,7 @@ If the reply references Jira tickets or PRs, include links inline.
 - **Read-only.** Never post to Slack, modify Jira, or push code. Analysis and drafting only.
 - **Privacy.** Don't expose messages from DMs or private channels the user hasn't explicitly shared.
 - **Stale thread.** If the last message is >7 days old, note: `"This thread has been inactive for <N> days — context may be stale."`
+- **No redundant sections.** Do not output a metadata table, key-examples table, and timeline if they repeat the same content. Prefer one short high-level section plus investigation sections.
+- **Simple-English first.** Start high level, then go deep. The first explanation should be understandable without prior knowledge of the project.
+- **No unnecessary paths.** Avoid full file/function/notebook/catalog paths unless explicitly requested.
+- **Short answer first.** The first useful answer should usually fit into 2-3 short paragraphs before any deep-dive sections.
