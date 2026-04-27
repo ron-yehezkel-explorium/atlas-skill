@@ -33,6 +33,7 @@ Allowed values (closed list — do not invent new ones):
 | Delivery | Customer delivery, exports, integrations |
 | Firmo | Firmographic data, company-level attributes |
 | Tech | Infrastructure, tooling, CI/CD, platform, frameworks |
+| Oncall | oncall issues OR CS/customer-facing analysis tickets routed through on-call |
 | Other | Anything that doesn't fit the above categories |
 
 **Selection rules:**
@@ -51,6 +52,121 @@ Set only if explicitly mentioned or obviously urgent. Otherwise omit.
 ## Ticket Linking
 Every ticket ID in output must be a clickable link: `[ATB-123](https://exploriumai.atlassian.net/browse/ATB-123)`  
 Never write bare IDs. Never use backticks around ticket IDs.
+
+---
+
+## CS Analysis Ticket Flow
+
+Use this flow when the user explicitly asks to create/open/file/add a **CS ticket**, **CS analysis ticket**, or customer-facing analysis ticket. Common sources are `#data-requests`, `#data-public`, customer channels, or Slack threads from CS/revenue users, but those are signals only — do not require a specific channel or requester.
+
+This flow overrides the generic ticket defaults below. It is still a Jira write flow: **show the full preflight fields and wait for explicit approval before creating anything**.
+
+### CS Field Rules
+
+- `project`: `ATB`
+- `type`: `Task` unless the request is clearly a bug/regression
+- `summary`: start with `[cs]`
+- `topic`: `oncall`, passed as `customfield_10264`
+- `labels`: always include `gminion`, plus approved customer label(s) when inferred
+- `requester/reporter`: the employee who found/reported the issue in the Slack thread, not necessarily the person asking to create the ticket
+- `assignee`: current Atlas on-call
+- `status`: transition to `To Do` after creation
+- `rank`: rank at the top of `To Do` when a ranking tool/API is available; if not available, explicitly say ranking was not performed
+- `source`: validated Slack permalink when the request came from Slack
+
+### CS Field Inference
+
+1. Infer customer names from channel name, request text, thread history, and examples.
+2. Canonicalize customer labels before creation when possible:
+   - Compare by a normalized key that lowercases and removes spaces, `_`, `-`, `.`, and `/`.
+   - Reuse an existing Jira label when the normalized key matches.
+   - Only create a new customer label when no equivalent existing label is found.
+   - If label lookup is unavailable, show the inferred label(s) in the preflight and wait for approval.
+3. Infer the requester/reporter from the original issue report in the Slack thread. If unclear, show `Requester: unclear` and ask for correction.
+4. Identify the current Atlas on-call by checking the latest rotation update in `#atlas-internal`, then map the Slack user to the team roster. If unclear, ask before creation.
+
+### CS Preflight Fields
+
+Before creation, show all final fields in one plain-text block:
+
+```text
+--- CS ticket fields to be created ---
+project: ATB
+type: Task | Bug
+summary: [cs] ...
+topic: oncall
+labels: gminion[, <customer_label>...]
+customer labels: <labels> | none inferred
+requester/reporter: <employee> | unclear
+assignee: <current Atlas on-call>
+status after create: To Do
+rank: top of To Do when available | Not available
+description:
+  [full text using the CS description template]
+parent: ATB-XXXX | Omit
+priority: ... | Omit
+components: ... | Omit
+additional_fields: {"customfield_10264":{"value":"oncall"},"labels":["gminion",...]}
+--------------------------------------
+```
+
+Stop after showing the block. Create only after explicit approval such as `approve`, `yes create`, `go ahead`, or `looks good, create it`.
+
+### CS Description Template
+
+Plain text only:
+
+```text
+Context
+
+[Slack/request background, customer, data/product area, relevant examples]
+
+Analysis request
+
+[The question/problem to analyze]
+
+Customer
+
+[Customer name(s), or Not inferred]
+
+Requester
+
+[Employee who found and reported the issue]
+
+Evidence / examples
+
+- [IDs, domains, screenshots/files mentioned, exact examples]
+
+Expected output
+
+[What answer/artifact CS needs, or Atlas analysis and recommendation]
+
+Source
+
+Requested via Slack: <permalink>
+
+DOD
+
+- Investigate the examples and identify root cause or explain limitation
+- Share findings and recommended next step in the Jira ticket
+- Update the CS-facing Slack thread with a concise summary when done
+```
+
+### CS Create Request
+
+After approval:
+
+1. Create the ATB issue using the approved fields.
+2. Include `customfield_10264` with `oncall` in `additional_fields`.
+3. Include `labels` with `gminion` and any approved customer labels in `additional_fields`.
+4. Set the Jira reporter/requester to the approved employee when Jira permissions allow it. If Jira rejects reporter changes, keep the created reporter and preserve the approved requester in the description.
+5. Assign the ticket to the current Atlas on-call.
+6. Transition the ticket to `To Do` using `atlassian_jira_get_transitions` then `atlassian_jira_transition_issue`.
+7. Rank the ticket at the top of `To Do` when a ranking tool/API is available. If ranking fails or is unavailable, still report the created ticket and explicitly state the ranking result.
+
+### CS Verify
+
+Use Atlassian MCP Jira view tools to verify `summary`, `labels`, `assignee`, `reporter` when set, `status` (`To Do`), `customfield_10264` (`oncall`), and `description`.
 
 ---
 
