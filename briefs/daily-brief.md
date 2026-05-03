@@ -150,7 +150,7 @@ N. **<KEY>** <Title> — **<flags if any>**
 ## Deep Dive
 
 Want more context on any tickets? Reply with person + number:
-> "Itai - 1, Yaara - 1 & 4"
+> "Yaara - 1, Rani - 1 & 4"
 
 I'll first explain deeper from Jira, then offer to research Slack, git, and Databricks for the full picture.
 

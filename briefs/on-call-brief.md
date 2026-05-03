@@ -173,8 +173,8 @@ Sorted: open/investigating/known first (🔴/🟡), then resolved (✅). Most re
 **When:** Mar 3, 07:22 PM
 **Channel:** #issues-data
 **Triggered by:** DPD Alert Bot
-**Owner:** Itai Dagan
-**Response:** Itai Dagan (Mar 3, 07:45 PM) — acknowledged, restarting failed jobs and checking provider health
+**Owner:** Atlas Engineer
+**Response:** Atlas Engineer (Mar 3, 07:45 PM) — acknowledged, restarting failed jobs and checking provider health
 **Needed:** Confirm providers are healthy after restart; escalate if failures recur within 2 hours
 ```
 
